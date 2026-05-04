@@ -1,7 +1,10 @@
 import { useState, useEffect, useRef } from "react";
 
 // ─── Anthropic API helper ─────────────────────────────────────────
-const getApiKey = () => localStorage.getItem("cellarbook-api-key") || "";
+const getApiKey = () =>
+  import.meta.env.VITE_ANTHROPIC_API_KEY ||
+  localStorage.getItem("cellarbook-api-key") ||
+  "";
 
 async function callClaude({ messages, system, maxTokens = 1024 }) {
   const key = getApiKey();
