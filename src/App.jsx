@@ -975,6 +975,228 @@ function Sommelier({ tastings }) {
   );
 }
 
+// ─── Scan Bottle Modal ────────────────────────────────────────────
+
+function ScanBottleModal({ onAddToTasting, onAddToCellar, onClose }) {
+  const [step, setStep] = useState("capture"); // capture | reading | review
+  const [image, setImage] = useState(null);
+  const [parsed, setParsed] = useState(null);
+  const [error, setError] = useState(null);
+  const [quantity, setQuantity] = useState(1);
+  const fileRef = useRef();
+
+  const readLabel = async (dataUrl) => {
+    setStep("reading");
+    try {
+      const imgData = dataUrl.includes(",") ? dataUrl.split(",")[1] : dataUrl;
+      const res = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model: "claude-sonnet-4-20250514",
+          max_tokens: 600,
+          messages: [{
+            role: "user",
+            content: [
+              { type: "image", source: { type: "base64", media_type: "image/jpeg", data: imgData } },
+              { type: "text", text: `Analyse this wine bottle or label carefully. Return ONLY valid JSON, no markdown:
+{"name":"wine name only (not producer)","producer":"winery or producer name","vintage":2020,"region":"wine region","country":"country of origin","grape":"grape variety or blend","style":"Red|White|Rosé|Sparkling|Dessert|Orange","price":null}
+Be precise. Use null for any field you cannot determine from the label.` }
+            ]
+          }]
+        })
+      });
+      const data = await res.json();
+      const raw = data.content.map(c => c.text || "").join("").replace(/```json|```/g, "").trim();
+      setParsed(JSON.parse(raw));
+    } catch {
+      setError("Couldn't read the label — please fill in manually.");
+    }
+    setStep("review");
+  };
+
+  const handleFile = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => { setImage(reader.result); readLabel(reader.result); };
+    reader.readAsDataURL(file);
+  };
+
+  const reset = () => { setStep("capture"); setImage(null); setParsed(null); setError(null); setQuantity(1); };
+
+  const handleAddToCellar = () => {
+    onAddToCellar({
+      id: `c${Date.now()}`,
+      name: parsed?.name || "",
+      producer: parsed?.producer || "",
+      vintage: parsed?.vintage || null,
+      region: parsed?.region || "",
+      country: parsed?.country || "Australia",
+      grape: parsed?.grape || "",
+      style: parsed?.style || "Red",
+      quantity,
+      drinkFrom: null,
+      drinkBy: null,
+      price: parsed?.price ? `$${parsed.price}` : "",
+      location: "John's Cellar",
+      notes: "",
+      dateAdded: new Date().toISOString().split("T")[0],
+    });
+  };
+
+  const handleAddToTasting = () => {
+    onAddToTasting({
+      name: parsed?.name || "",
+      producer: parsed?.producer || "",
+      vintage: parsed?.vintage || null,
+      region: parsed?.region || "",
+      country: parsed?.country || "France",
+      grape: parsed?.grape || "",
+      style: parsed?.style || "Red",
+      label: image,
+      date: new Date().toISOString().split("T")[0],
+    });
+  };
+
+  const [sc, tc] = styleColors[parsed?.style] || ["#222", "#888"];
+
+  return (
+    <Modal title="📷 Scan a Bottle" onClose={onClose}>
+
+      {/* ── Step: Capture ── */}
+      {step === "capture" && (
+        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "20px" }}>
+          <div
+            onClick={() => fileRef.current.click()}
+            style={{
+              width: "220px", height: "220px", borderRadius: "20px",
+              border: "2px dashed #333", background: "#141414",
+              display: "flex", flexDirection: "column", alignItems: "center",
+              justifyContent: "center", gap: "14px", cursor: "pointer",
+              transition: "border-color 0.15s",
+            }}
+            onMouseEnter={e => e.currentTarget.style.borderColor = gold}
+            onMouseLeave={e => e.currentTarget.style.borderColor = "#333"}
+          >
+            <div style={{ fontSize: "52px" }}>📷</div>
+            <div style={{ fontSize: "11px", color: "#555", fontFamily: "monospace", textAlign: "center", lineHeight: 1.6 }}>
+              Tap to take a photo<br />or upload from your library
+            </div>
+          </div>
+          <input ref={fileRef} type="file" accept="image/*" capture="environment" onChange={handleFile} style={{ display: "none" }} />
+          <Btn variant="gold" onClick={() => fileRef.current.click()} style={{ padding: "13px 36px", fontSize: "15px" }}>
+            Take / Upload Photo
+          </Btn>
+        </div>
+      )}
+
+      {/* ── Step: Reading ── */}
+      {step === "reading" && (
+        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "24px", padding: "16px 0" }}>
+          {image && <img src={image} alt="" style={{ height: "140px", borderRadius: "12px", objectFit: "contain", border: "1px solid #2a2a2a" }} />}
+          <div style={{ display: "flex", gap: "7px" }}>
+            {[0, 1, 2].map(j => (
+              <div key={j} style={{
+                width: "9px", height: "9px", borderRadius: "50%", background: gold,
+                animation: `somm-pulse 1.2s ease-in-out ${j * 0.2}s infinite`,
+              }} />
+            ))}
+          </div>
+          <div style={{ color: "#555", fontFamily: "monospace", fontSize: "12px", letterSpacing: "1px" }}>READING LABEL…</div>
+        </div>
+      )}
+
+      {/* ── Step: Review ── */}
+      {step === "review" && (
+        <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+          {/* Wine preview card */}
+          {parsed && !error && (
+            <div style={{
+              background: "#141414", border: "1px solid #2a2a2a",
+              borderRadius: "14px", padding: "16px", position: "relative", overflow: "hidden",
+            }}>
+              <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: "3px", background: tc, opacity: 0.8 }} />
+              <div style={{ position: "absolute", top: "14px", right: "14px" }}>
+                <Badge label={parsed.style || "Unknown"} color={sc} text={tc} />
+              </div>
+              <div style={{ display: "flex", gap: "14px", alignItems: "flex-start" }}>
+                {image && (
+                  <img src={image} alt="" style={{ height: "80px", width: "56px", objectFit: "cover", borderRadius: "8px", border: "1px solid #2a2a2a", flexShrink: 0 }} />
+                )}
+                <div style={{ flex: 1 }}>
+                  <div style={{ color: "#555", fontSize: "11px", fontFamily: "monospace", marginBottom: "2px" }}>
+                    {parsed.vintage || "NV"} · {parsed.country || "Unknown"}
+                  </div>
+                  <div style={{ fontFamily: "'Playfair Display', serif", fontSize: "18px", fontWeight: 700, color: "#f0ebe0", lineHeight: 1.2, paddingRight: "70px", marginBottom: "2px" }}>
+                    {parsed.name || "Unknown wine"}
+                  </div>
+                  <div style={{ color: "#888", fontSize: "12px", marginBottom: "2px" }}>{parsed.producer}</div>
+                  <div style={{ color: "#555", fontSize: "11px", fontFamily: "monospace" }}>
+                    {[parsed.grape, parsed.region].filter(Boolean).join(" · ")}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {error && (
+            <div style={{ background: "#1a0808", border: "1px solid #3a1515", borderRadius: "10px", padding: "12px 16px", color: "#c05050", fontSize: "12px", fontFamily: "monospace" }}>
+              {error}
+            </div>
+          )}
+
+          {/* Destination choice */}
+          <div style={{ fontSize: "10px", color: "#555", fontFamily: "monospace", letterSpacing: "1px", textTransform: "uppercase" }}>Where would you like to add this wine?</div>
+
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>
+            {/* Log Tasting */}
+            <button onClick={handleAddToTasting} style={{
+              background: "#1a1a1a", border: "1px solid #2a2a2a", borderRadius: "14px",
+              padding: "18px 12px", cursor: "pointer", textAlign: "center",
+              transition: "border-color 0.15s, background 0.15s",
+            }}
+              onMouseEnter={e => { e.currentTarget.style.borderColor = blush; e.currentTarget.style.background = "#1e1618"; }}
+              onMouseLeave={e => { e.currentTarget.style.borderColor = "#2a2a2a"; e.currentTarget.style.background = "#1a1a1a"; }}
+            >
+              <div style={{ fontSize: "28px", marginBottom: "8px" }}>🍷</div>
+              <div style={{ fontFamily: "'Playfair Display', serif", fontSize: "15px", color: "#f0ebe0", marginBottom: "4px" }}>Log Tasting</div>
+              <div style={{ fontSize: "10px", color: "#555", fontFamily: "monospace" }}>Add ratings & notes</div>
+            </button>
+
+            {/* Add to Cellar */}
+            <div style={{
+              background: "#1a1a1a", border: "1px solid #2a2a2a", borderRadius: "14px",
+              padding: "18px 12px", textAlign: "center",
+            }}>
+              <div style={{ fontSize: "28px", marginBottom: "8px" }}>🏠</div>
+              <div style={{ fontFamily: "'Playfair Display', serif", fontSize: "15px", color: "#f0ebe0", marginBottom: "8px" }}>Add to Cellar</div>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "10px", marginBottom: "10px" }}>
+                <button onClick={() => setQuantity(q => Math.max(1, q - 1))} style={{ background: "#242424", border: "1px solid #333", borderRadius: "6px", color: "#aaa", width: "28px", height: "28px", cursor: "pointer", fontSize: "16px" }}>−</button>
+                <span style={{ fontFamily: "'Playfair Display', serif", fontSize: "20px", color: gold, minWidth: "24px" }}>{quantity}</span>
+                <button onClick={() => setQuantity(q => q + 1)} style={{ background: "#242424", border: "1px solid #333", borderRadius: "6px", color: "#aaa", width: "28px", height: "28px", cursor: "pointer", fontSize: "16px" }}>+</button>
+              </div>
+              <button onClick={handleAddToCellar} style={{
+                background: `linear-gradient(135deg, ${gold}, #a07830)`,
+                border: "none", borderRadius: "8px", cursor: "pointer",
+                fontFamily: "'Playfair Display', serif", fontSize: "13px", fontWeight: 700,
+                color: "#fff", padding: "8px 16px", width: "100%",
+              }}>
+                Publish to Cellar
+              </button>
+            </div>
+          </div>
+
+          <div style={{ display: "flex", gap: "8px", justifyContent: "flex-end" }}>
+            <Btn onClick={reset}>Retake</Btn>
+            <Btn onClick={onClose}>Cancel</Btn>
+          </div>
+        </div>
+      )}
+    </Modal>
+  );
+}
+
 // ─── Splash Screen ────────────────────────────────────────────────
 
 function SplashScreen({ onEnter }) {
@@ -1135,6 +1357,7 @@ export default function App() {
   const [cellar, setCellar] = useState([]);
   const [loaded, setLoaded] = useState(false);
 
+  const [showScanModal, setShowScanModal] = useState(false);
   const [showTastingForm, setShowTastingForm] = useState(false);
   const [editTasting, setEditTasting] = useState(null);
   const [showCellarForm, setShowCellarForm] = useState(false);
@@ -1179,6 +1402,17 @@ export default function App() {
   const deleteCellar = (id) => { if (confirm("Remove from cellar?")) setCellar(cs => cs.filter(c => c.id !== id)); };
   const adjustQty = (id, delta) => {
     setCellar(cs => cs.map(c => c.id === id ? { ...c, quantity: Math.max(0, (c.quantity || 0) + delta) } : c));
+  };
+
+  // Scan bottle handlers
+  const handleScanToTasting = (wineData) => {
+    setEditTasting(wineData);
+    setShowTastingForm(true);
+    setShowScanModal(false);
+  };
+  const handleScanToCellar = (entry) => {
+    setCellar(cs => [entry, ...cs]);
+    setShowScanModal(false);
   };
 
   const filteredTastings = tastings
@@ -1306,7 +1540,33 @@ export default function App() {
       {/* Sommelier tab */}
       {tab === "sommelier" && <Sommelier tastings={tastings} />}
 
+      {/* Floating scan button */}
+      {!showSplash && (
+        <button
+          onClick={() => setShowScanModal(true)}
+          title="Scan a bottle"
+          style={{
+            position: "fixed", bottom: "28px", right: "28px", zIndex: 500,
+            width: "60px", height: "60px", borderRadius: "50%",
+            background: `linear-gradient(135deg, ${gold}, #a07830)`,
+            border: "none", cursor: "pointer", fontSize: "24px",
+            boxShadow: "0 4px 20px rgba(201,168,76,0.45)",
+            transition: "transform 0.15s, box-shadow 0.15s",
+            display: "flex", alignItems: "center", justifyContent: "center",
+          }}
+          onMouseEnter={e => { e.currentTarget.style.transform = "scale(1.1)"; e.currentTarget.style.boxShadow = "0 6px 28px rgba(201,168,76,0.6)"; }}
+          onMouseLeave={e => { e.currentTarget.style.transform = ""; e.currentTarget.style.boxShadow = "0 4px 20px rgba(201,168,76,0.45)"; }}
+        >📷</button>
+      )}
+
       {/* Modals */}
+      {showScanModal && (
+        <ScanBottleModal
+          onAddToTasting={handleScanToTasting}
+          onAddToCellar={handleScanToCellar}
+          onClose={() => setShowScanModal(false)}
+        />
+      )}
       {showTastingForm && (
         <TastingForm wine={editTasting} onSave={saveTasting} onCancel={() => { setShowTastingForm(false); setEditTasting(null); }} />
       )}
