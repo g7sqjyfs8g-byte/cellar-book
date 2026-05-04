@@ -1,5 +1,34 @@
 import { useState, useEffect, useRef } from "react";
 
+// ─── Anthropic API helper ─────────────────────────────────────────
+const getApiKey = () => localStorage.getItem("cellarbook-api-key") || "";
+
+async function callClaude({ messages, system, maxTokens = 1024 }) {
+  const key = getApiKey();
+  if (!key) throw new Error("NO_API_KEY");
+  const res = await fetch("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-api-key": key,
+      "anthropic-version": "2023-06-01",
+      "anthropic-dangerous-request-source": "user-published-app",
+    },
+    body: JSON.stringify({
+      model: "claude-sonnet-4-20250514",
+      max_tokens: maxTokens,
+      ...(system ? { system } : {}),
+      messages,
+    }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err?.error?.message || `API error ${res.status}`);
+  }
+  const data = await res.json();
+  return data.content?.map(c => c.text || "").join("") || "";
+}
+
 const STYLES = ["Red", "White", "Rosé", "Sparkling", "Dessert", "Orange"];
 const COUNTRIES = ["Australia", "France", "Italy", "Spain", "New Zealand", "USA", "Germany", "Portugal", "Argentina", "Chile", "Other"];
 const REGIONS_AU = ["Barossa Valley", "McLaren Vale", "Clare Valley", "Eden Valley", "Coonawarra", "Margaret River", "Yarra Valley", "Hunter Valley", "Mornington Peninsula", "Tamar Valley", "Coal River", "Wrattonbully", "Other"];
@@ -299,33 +328,21 @@ function TastingForm({ wine, onSave, onCancel }) {
     setAiLoading(true);
     try {
       const imgData = form.label.includes(",") ? form.label.split(",")[1] : form.label;
-      const res = await fetch("https://api.anthropic.com/v1/messages", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          model: "claude-sonnet-4-20250514",
-          max_tokens: 500,
-          messages: [{
-            role: "user",
-            content: [
-              { type: "image", source: { type: "base64", media_type: "image/jpeg", data: imgData } },
-              { type: "text", text: `Read this wine label. Return ONLY valid JSON, no markdown:
-{"name":"wine name only","producer":"winery/producer","vintage":2024,"region":"region","country":"country","grape":"grape or blend","style":"Red|White|Rosé|Sparkling|Dessert|Orange"}
-Use null for unknown fields.` }
-            ]
-          }]
-        })
+      const raw = await callClaude({
+        maxTokens: 500,
+        messages: [{ role: "user", content: [
+          { type: "image", source: { type: "base64", media_type: "image/jpeg", data: imgData } },
+          { type: "text", text: `Read this wine label. Return ONLY valid JSON, no markdown:\n{"name":"wine name only","producer":"winery/producer","vintage":2024,"region":"region","country":"country","grape":"grape or blend","style":"Red|White|Rosé|Sparkling|Dessert|Orange"}\nUse null for unknown fields.` }
+        ]}],
       });
-      const data = await res.json();
-      const raw = data.content.map(c => c.text || "").join("").replace(/```json|```/g, "").trim();
-      const parsed = JSON.parse(raw);
+      const parsed = JSON.parse(raw.replace(/```json|```/g, "").trim());
       setForm(f => ({
         ...f,
         ...Object.fromEntries(Object.entries(parsed).filter(([, v]) => v != null)),
         vintage: parsed.vintage ?? f.vintage,
       }));
     } catch (e) {
-      alert("Couldn't read the label — please fill in manually.");
+      alert(e.message === "NO_API_KEY" ? "Add your Anthropic API key in Settings (⚙️) first." : "Couldn't read the label — please fill in manually.");
     }
     setAiLoading(false);
   };
@@ -434,33 +451,21 @@ function CellarForm({ wine, onSave, onCancel }) {
     setAiLoading(true);
     try {
       const imgData = labelImg.includes(",") ? labelImg.split(",")[1] : labelImg;
-      const res = await fetch("https://api.anthropic.com/v1/messages", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          model: "claude-sonnet-4-20250514",
-          max_tokens: 500,
-          messages: [{
-            role: "user",
-            content: [
-              { type: "image", source: { type: "base64", media_type: "image/jpeg", data: imgData } },
-              { type: "text", text: `Read this wine label. Return ONLY valid JSON, no markdown:
-{"name":"wine name only","producer":"winery/producer","vintage":2024,"region":"region","country":"country","grape":"grape or blend","style":"Red|White|Rosé|Sparkling|Dessert|Orange"}
-Use null for unknown fields.` }
-            ]
-          }]
-        })
+      const raw = await callClaude({
+        maxTokens: 500,
+        messages: [{ role: "user", content: [
+          { type: "image", source: { type: "base64", media_type: "image/jpeg", data: imgData } },
+          { type: "text", text: `Read this wine label. Return ONLY valid JSON, no markdown:\n{"name":"wine name only","producer":"winery/producer","vintage":2024,"region":"region","country":"country","grape":"grape or blend","style":"Red|White|Rosé|Sparkling|Dessert|Orange"}\nUse null for unknown fields.` }
+        ]}],
       });
-      const data = await res.json();
-      const raw = data.content.map(c => c.text || "").join("").replace(/```json|```/g, "").trim();
-      const parsed = JSON.parse(raw);
+      const parsed = JSON.parse(raw.replace(/```json|```/g, "").trim());
       setForm(f => ({
         ...f,
         ...Object.fromEntries(Object.entries(parsed).filter(([, v]) => v != null)),
         vintage: parsed.vintage ?? f.vintage,
       }));
-    } catch {
-      alert("Couldn't read the label — please fill in manually.");
+    } catch (e) {
+      alert(e.message === "NO_API_KEY" ? "Add your Anthropic API key in Settings (⚙️) first." : "Couldn't read the label — please fill in manually.");
     }
     setAiLoading(false);
   };
@@ -700,16 +705,7 @@ function Sommelier({ tastings }) {
     return base;
   };
 
-  const callClaude = async (msgs, sys) => {
-    const res = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ model: "claude-sonnet-4-20250514", max_tokens: 1024, system: sys, messages: msgs }),
-    });
-    if (!res.ok) throw new Error(`API error ${res.status}`);
-    const data = await res.json();
-    return data.content?.map(c => c.text || "").join("") || "No response received.";
-  };
+  const claudeChat = (msgs, sys) => callClaude({ messages: msgs, system: sys });
 
   const push = (role, text, extras = {}) =>
     setMessages(prev => [...prev, { role, text, ...extras }]);
@@ -723,10 +719,10 @@ function Sommelier({ tastings }) {
     try {
       const history = [...messages.filter(m => m.mode === "ask"), { role: "user", text, mode: "ask" }]
         .map(m => ({ role: m.role, content: m.text }));
-      const reply = await callClaude(history, system("ask"));
+      const reply = await claudeChat(history, system("ask"));
       push("assistant", reply, { mode: "ask" });
-    } catch {
-      push("assistant", "Sorry, I couldn't reach the sommelier. Please try again.", { mode: "ask", isError: true });
+    } catch (e) {
+      push("assistant", e.message === "NO_API_KEY" ? "No API key set — tap ⚙️ in the header to add your Anthropic API key." : "Sorry, I couldn't reach the sommelier. Please try again.", { mode: "ask", isError: true });
     }
     setLoading(false);
   };
@@ -738,10 +734,10 @@ function Sommelier({ tastings }) {
     setDish("");
     setLoading(true);
     try {
-      const reply = await callClaude([{ role: "user", content: text }], system("meal"));
+      const reply = await claudeChat([{ role: "user", content: text }], system("meal"));
       push("assistant", reply, { mode: "meal" });
-    } catch {
-      push("assistant", "Sorry, I couldn't reach the sommelier. Please try again.", { mode: "meal", isError: true });
+    } catch (e) {
+      push("assistant", e.message === "NO_API_KEY" ? "No API key set — tap ⚙️ in the header to add your Anthropic API key." : "Sorry, I couldn't reach the sommelier. Please try again.", { mode: "meal", isError: true });
     }
     setLoading(false);
   };
@@ -762,10 +758,10 @@ function Sommelier({ tastings }) {
       if (dish) parts.push(`My dish: ${dish}`);
       parts.push(wineListImg ? "Read the wine list in the image and recommend the best pairings for my dish." : "Suggest wines that would pair well with my dish.");
       content.push({ type: "text", text: parts.join("\n") });
-      const reply = await callClaude([{ role: "user", content }], system("restaurant"));
+      const reply = await claudeChat([{ role: "user", content }], system("restaurant"));
       push("assistant", reply, { mode: "restaurant" });
-    } catch {
-      push("assistant", "Sorry, I couldn't reach the sommelier. Please try again.", { mode: "restaurant", isError: true });
+    } catch (e) {
+      push("assistant", e.message === "NO_API_KEY" ? "No API key set — tap ⚙️ in the header to add your Anthropic API key." : "Sorry, I couldn't reach the sommelier. Please try again.", { mode: "restaurant", isError: true });
     }
     setLoading(false);
   };
@@ -975,6 +971,50 @@ function Sommelier({ tastings }) {
   );
 }
 
+// ─── Settings Modal ───────────────────────────────────────────────
+
+function SettingsModal({ onClose }) {
+  const [key, setKey] = useState(localStorage.getItem("cellarbook-api-key") || "");
+  const [saved, setSaved] = useState(false);
+
+  const handleSave = () => {
+    localStorage.setItem("cellarbook-api-key", key.trim());
+    setSaved(true);
+    setTimeout(onClose, 800);
+  };
+
+  return (
+    <Modal title="⚙️ Settings" onClose={onClose}>
+      <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+        <div>
+          <div style={{ fontSize: "10px", color: "#666", fontFamily: "monospace", letterSpacing: "1px", marginBottom: "6px", textTransform: "uppercase" }}>Anthropic API Key</div>
+          <div style={{ fontSize: "11px", color: "#555", fontFamily: "monospace", marginBottom: "10px", lineHeight: 1.6 }}>
+            Required for the Sommelier, bottle scanner, and label auto-fill. Get a key at{" "}
+            <span style={{ color: gold }}>console.anthropic.com</span>.
+          </div>
+          <input
+            type="password"
+            value={key}
+            onChange={e => { setKey(e.target.value); setSaved(false); }}
+            placeholder="sk-ant-…"
+            style={{
+              background: "#181818", border: "1px solid #2e2e2e", borderRadius: "8px",
+              padding: "10px 12px", color: "#f0ebe0", fontSize: "13px",
+              fontFamily: "monospace", width: "100%", boxSizing: "border-box", outline: "none",
+            }}
+          />
+        </div>
+        <div style={{ display: "flex", gap: "10px", justifyContent: "flex-end" }}>
+          <Btn onClick={onClose}>Cancel</Btn>
+          <Btn variant="gold" onClick={handleSave} disabled={!key.trim()}>
+            {saved ? "✓ Saved" : "Save"}
+          </Btn>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
 // ─── Scan Bottle Modal ────────────────────────────────────────────
 
 function ScanBottleModal({ onAddToTasting, onAddToCellar, onClose }) {
@@ -989,28 +1029,16 @@ function ScanBottleModal({ onAddToTasting, onAddToCellar, onClose }) {
     setStep("reading");
     try {
       const imgData = dataUrl.includes(",") ? dataUrl.split(",")[1] : dataUrl;
-      const res = await fetch("https://api.anthropic.com/v1/messages", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          model: "claude-sonnet-4-20250514",
-          max_tokens: 600,
-          messages: [{
-            role: "user",
-            content: [
-              { type: "image", source: { type: "base64", media_type: "image/jpeg", data: imgData } },
-              { type: "text", text: `Analyse this wine bottle or label carefully. Return ONLY valid JSON, no markdown:
-{"name":"wine name only (not producer)","producer":"winery or producer name","vintage":2020,"region":"wine region","country":"country of origin","grape":"grape variety or blend","style":"Red|White|Rosé|Sparkling|Dessert|Orange","price":null}
-Be precise. Use null for any field you cannot determine from the label.` }
-            ]
-          }]
-        })
+      const raw = await callClaude({
+        maxTokens: 600,
+        messages: [{ role: "user", content: [
+          { type: "image", source: { type: "base64", media_type: "image/jpeg", data: imgData } },
+          { type: "text", text: `Analyse this wine bottle or label carefully. Return ONLY valid JSON, no markdown:\n{"name":"wine name only (not producer)","producer":"winery or producer name","vintage":2020,"region":"wine region","country":"country of origin","grape":"grape variety or blend","style":"Red|White|Rosé|Sparkling|Dessert|Orange","price":null}\nBe precise. Use null for any field you cannot determine.` }
+        ]}],
       });
-      const data = await res.json();
-      const raw = data.content.map(c => c.text || "").join("").replace(/```json|```/g, "").trim();
-      setParsed(JSON.parse(raw));
-    } catch {
-      setError("Couldn't read the label — please fill in manually.");
+      setParsed(JSON.parse(raw.replace(/```json|```/g, "").trim()));
+    } catch (e) {
+      setError(e.message === "NO_API_KEY" ? "Add your Anthropic API key in Settings (⚙️) first." : "Couldn't read the label — please fill in manually.");
     }
     setStep("review");
   };
@@ -1357,6 +1385,7 @@ export default function App() {
   const [cellar, setCellar] = useState([]);
   const [loaded, setLoaded] = useState(false);
 
+  const [showSettings, setShowSettings] = useState(false);
   const [showScanModal, setShowScanModal] = useState(false);
   const [showTastingForm, setShowTastingForm] = useState(false);
   const [editTasting, setEditTasting] = useState(null);
@@ -1452,11 +1481,20 @@ export default function App() {
 
       {/* Header */}
       <div style={{ background: "#0d0d0d", borderBottom: "1px solid #1a1a1a", padding: "28px 20px 0" }}>
-        <div style={{ maxWidth: "900px", margin: "0 auto" }}>
+        <div style={{ maxWidth: "900px", margin: "0 auto", position: "relative" }}>
           <div style={{ textAlign: "center", marginBottom: "20px" }}>
             <div style={{ fontSize: "10px", letterSpacing: "4px", color: gold, fontFamily: "monospace", marginBottom: "6px" }}>JM & NICKY</div>
             <div style={{ fontFamily: "'Playfair Display', serif", fontSize: "clamp(28px, 5vw, 44px)", fontWeight: 900, color: "#f0ebe0", lineHeight: 1 }}>The Cellar Book</div>
             <div style={{ fontSize: "11px", color: "#444", fontFamily: "monospace", marginTop: "6px" }}>A personal wine journal</div>
+            <button onClick={() => setShowSettings(true)} title="Settings" style={{
+              position: "absolute", top: "20px", right: "20px",
+              background: "none", border: "1px solid #2a2a2a", borderRadius: "8px",
+              color: "#555", cursor: "pointer", fontSize: "16px", padding: "6px 10px",
+              transition: "color 0.15s, border-color 0.15s",
+            }}
+              onMouseEnter={e => { e.currentTarget.style.color = gold; e.currentTarget.style.borderColor = gold; }}
+              onMouseLeave={e => { e.currentTarget.style.color = "#555"; e.currentTarget.style.borderColor = "#2a2a2a"; }}
+            >⚙️</button>
             <div style={{ display: "flex", justifyContent: "center", gap: "28px", marginTop: "18px", flexWrap: "wrap" }}>
               {[["Tastings", tastings.length, "#f0ebe0"], ["JM Avg", avgJM, gold], ["Nicky Avg", avgNicky, blush], ["Bottles", totalBottles, "#f0ebe0"]].map(([l, v, c]) => (
                 <div key={l} style={{ textAlign: "center" }}>
@@ -1560,6 +1598,7 @@ export default function App() {
       )}
 
       {/* Modals */}
+      {showSettings && <SettingsModal onClose={() => setShowSettings(false)} />}
       {showScanModal && (
         <ScanBottleModal
           onAddToTasting={handleScanToTasting}
