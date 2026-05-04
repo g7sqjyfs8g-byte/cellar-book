@@ -1,0 +1,1318 @@
+import { useState, useEffect, useRef } from "react";
+
+const STYLES = ["Red", "White", "Rosé", "Sparkling", "Dessert", "Orange"];
+const COUNTRIES = ["Australia", "France", "Italy", "Spain", "New Zealand", "USA", "Germany", "Portugal", "Argentina", "Chile", "Other"];
+const REGIONS_AU = ["Barossa Valley", "McLaren Vale", "Clare Valley", "Eden Valley", "Coonawarra", "Margaret River", "Yarra Valley", "Hunter Valley", "Mornington Peninsula", "Tamar Valley", "Coal River", "Wrattonbully", "Other"];
+
+const SEED_TASTINGS = [
+  {
+    id: "t1",
+    name: "Petit Chablis",
+    producer: "Christophe Patrice",
+    vintage: 2024,
+    region: "Chablis, Burgundy",
+    country: "France",
+    grape: "Chardonnay",
+    style: "White",
+    jmRating: 8.5,
+    nickyRating: 8.5,
+    notes: "Bone dry, high acid, flinty minerality. Perfect with seafood.",
+    pairing: "Seafood at Que Sera",
+    price: "",
+    location: "Que Sera Food & Wine Bar",
+    buyAgain: true,
+    date: "2026-05-02",
+    label: null,
+  },
+  {
+    id: "t2",
+    name: "Bremley Gamay",
+    producer: "Bremley",
+    vintage: 2024,
+    region: "Coal River, TAS",
+    country: "Australia",
+    grape: "Gamay",
+    style: "Red",
+    jmRating: null,
+    nickyRating: null,
+    notes: "Tried at lunch — verdict pending.",
+    pairing: "Seafood",
+    price: "$72",
+    location: "Restaurant",
+    buyAgain: null,
+    date: "2026-05-02",
+    label: null,
+  },
+];
+
+const SEED_CELLAR = [
+  { id: "c1",  name: "Elderton Command Barossa Shiraz",                              producer: "Elderton",              vintage: 2017, region: "Barossa Valley", country: "Australia", grape: "Shiraz",                                          style: "Red", quantity: 1, drinkFrom: null, drinkBy: 2037, price: "$150", location: "John's Cellar", notes: "",                      dateAdded: "2026-01-01" },
+  { id: "c2",  name: "Jacaranda Ridge Coonawarra Cabernet Sauvignon",                producer: "Orlando",               vintage: 2015, region: "Coonawarra",     country: "Australia", grape: "Cabernet Sauvignon",                              style: "Red", quantity: 1, drinkFrom: null, drinkBy: 2040, price: "$70",  location: "John's Cellar", notes: "Gift from Tim Micallef", dateAdded: "2026-01-01" },
+  { id: "c3",  name: "Bin 150 Marananga Barossa Valley Shiraz",                      producer: "Penfolds",              vintage: 2019, region: "Barossa Valley", country: "Australia", grape: "Shiraz",                                          style: "Red", quantity: 1, drinkFrom: null, drinkBy: 2039, price: "$100", location: "John's Cellar", notes: "Gift",                  dateAdded: "2026-01-01" },
+  { id: "c4",  name: "Bin 150 Marananga Shiraz",                                     producer: "Penfolds",              vintage: 2021, region: "Barossa Valley", country: "Australia", grape: "Shiraz",                                          style: "Red", quantity: 1, drinkFrom: null, drinkBy: 2045, price: "$100", location: "John's Cellar", notes: "",                      dateAdded: "2026-01-01" },
+  { id: "c5",  name: "St Henri Shiraz",                                               producer: "Penfolds",              vintage: 2017, region: "McLaren Vale",   country: "Australia", grape: "Shiraz",                                          style: "Red", quantity: 1, drinkFrom: null, drinkBy: 2047, price: "$130", location: "John's Cellar", notes: "",                      dateAdded: "2026-01-01" },
+  { id: "c6",  name: "St Henri Shiraz",                                               producer: "Penfolds",              vintage: 2020, region: "McLaren Vale",   country: "Australia", grape: "Shiraz",                                          style: "Red", quantity: 1, drinkFrom: null, drinkBy: 2045, price: "$136", location: "John's Cellar", notes: "",                      dateAdded: "2026-01-01" },
+  { id: "c7",  name: "Single Vineyard Reserve Coquun Hunter Valley Shiraz",           producer: "Pepper Tree Wines",     vintage: 2017, region: "Hunter Valley",  country: "Australia", grape: "Shiraz",                                          style: "Red", quantity: 6, drinkFrom: null, drinkBy: 2036, price: "$90",  location: "John's Cellar", notes: "",                      dateAdded: "2026-01-01" },
+  { id: "c8",  name: "Limited Release BDX-4",                                         producer: "Pepper Tree Wines",     vintage: 2022, region: "Wrattonbully",   country: "Australia", grape: "Cabernet Sauvignon Merlot Malbec Petit Verdot",   style: "Red", quantity: 1, drinkFrom: null, drinkBy: 2032, price: "$50",  location: "John's Cellar", notes: "",                      dateAdded: "2026-01-01" },
+  { id: "c9",  name: "Limited Release Red Hill Hunter Valley Shiraz",                 producer: "Pepper Tree Wines",     vintage: 2019, region: "Hunter Valley",  country: "Australia", grape: "Shiraz",                                          style: "Red", quantity: 2, drinkFrom: null, drinkBy: 2028, price: "$50",  location: "John's Cellar", notes: "",                      dateAdded: "2026-01-01" },
+  { id: "c10", name: "Premium Reserve Block 21A Cabernet Sauvignon",                  producer: "Pepper Tree Wines",     vintage: 2018, region: "Wrattonbully",   country: "Australia", grape: "Cabernet Sauvignon",                              style: "Red", quantity: 1, drinkFrom: null, drinkBy: 2032, price: "$60",  location: "John's Cellar", notes: "",                      dateAdded: "2026-01-01" },
+  { id: "c11", name: "Single Vineyard Elderslee Road Reserve Cabernet Sauvignon",     producer: "Pepper Tree Wines",     vintage: 2018, region: "Wrattonbully",   country: "Australia", grape: "Cabernet Sauvignon",                              style: "Red", quantity: 1, drinkFrom: null, drinkBy: 2020, price: "$50",  location: "John's Cellar", notes: "",                      dateAdded: "2026-01-01" },
+  { id: "c12", name: "Single Vineyard Premium Reserve The Gravels Shiraz",            producer: "Pepper Tree Wines",     vintage: 2019, region: "Wrattonbully",   country: "Australia", grape: "Shiraz",                                          style: "Red", quantity: 3, drinkFrom: null, drinkBy: 2029, price: "$50",  location: "John's Cellar", notes: "",                      dateAdded: "2026-01-01" },
+  { id: "c13", name: "Single Vineyard Strandlines Reserve Cabernet Shiraz",           producer: "Pepper Tree Wines",     vintage: 2019, region: "Wrattonbully",   country: "Australia", grape: "Cabernet Shiraz",                                 style: "Red", quantity: 2, drinkFrom: null, drinkBy: 2033, price: "$60",  location: "John's Cellar", notes: "",                      dateAdded: "2026-01-01" },
+  { id: "c14", name: "Stonewell Barossa Shiraz",                                      producer: "Peter Lehmann",         vintage: 2013, region: "Barossa Valley", country: "Australia", grape: "Shiraz",                                          style: "Red", quantity: 1, drinkFrom: null, drinkBy: 2045, price: "$75",  location: "John's Cellar", notes: "",                      dateAdded: "2026-01-01" },
+  { id: "c15", name: "Ridge of Tears",                                                producer: "Logan Wines",           vintage: 2018, region: "",               country: "Australia", grape: "Shiraz",                                          style: "Red", quantity: 1, drinkFrom: null, drinkBy: 2026, price: "$45",  location: "John's Cellar", notes: "",                      dateAdded: "2026-01-01" },
+  { id: "c16", name: "The Kinnear Mudgee Shiraz Cabernet",                            producer: "Robert Stein Vineyard", vintage: 2017, region: "Mudgee",         country: "Australia", grape: "Shiraz Cabernet",                                 style: "Red", quantity: 3, drinkFrom: null, drinkBy: 2027, price: "$90",  location: "John's Cellar", notes: "",                      dateAdded: "2026-01-01" },
+  { id: "c17", name: "The Factor",                                                    producer: "Torbreck Vintners",     vintage: 2020, region: "Barossa Valley", country: "Australia", grape: "Shiraz",                                          style: "Red", quantity: 1, drinkFrom: null, drinkBy: 2043, price: "$150", location: "John's Cellar", notes: "",                      dateAdded: "2026-01-01" },
+  { id: "c18", name: "The Struie",                                                    producer: "Torbreck Vintners",     vintage: 2021, region: "Barossa Valley", country: "Australia", grape: "Shiraz",                                          style: "Red", quantity: 1, drinkFrom: null, drinkBy: 2038, price: "$60",  location: "John's Cellar", notes: "",                      dateAdded: "2026-01-01" },
+  { id: "c19", name: "Jack Roth Mudgee Shiraz",                                       producer: "Yeates Wines",          vintage: 2017, region: "Mudgee",         country: "Australia", grape: "Shiraz",                                          style: "Red", quantity: 3, drinkFrom: null, drinkBy: 2030, price: "$35",  location: "John's Cellar", notes: "",                      dateAdded: "2026-01-01" },
+  { id: "c20", name: "Mudgee Cabernet Sauvignon",                                     producer: "Yeates Wines",          vintage: 2018, region: "Mudgee",         country: "Australia", grape: "Cabernet Sauvignon",                              style: "Red", quantity: 3, drinkFrom: null, drinkBy: 2025, price: "$65",  location: "John's Cellar", notes: "",                      dateAdded: "2026-01-01" },
+];
+
+// Storage helpers using window.storage (persistent shared)
+async function storageGet(key) {
+  try {
+    const r = await window.storage.get(key, true);
+    return r ? JSON.parse(r.value) : null;
+  } catch { return null; }
+}
+async function storageSet(key, value) {
+  try {
+    await window.storage.set(key, JSON.stringify(value), true);
+  } catch (e) { console.error("Storage error", e); }
+}
+
+// ─── Tiny components ────────────────────────────────────────────────
+
+const gold = "#c9a84c";
+const blush = "#d4849a";
+
+function Badge({ label, color = "#444", text = "#ccc" }) {
+  return (
+    <span style={{
+      background: color, color: text,
+      padding: "2px 9px", borderRadius: "20px",
+      fontSize: "10px", fontWeight: 700,
+      letterSpacing: "0.8px", textTransform: "uppercase",
+      fontFamily: "monospace", whiteSpace: "nowrap",
+    }}>{label}</span>
+  );
+}
+
+const styleColors = {
+  Red: ["#3a1010", "#c0392b"],
+  White: ["#2a2800", "#c9a84c"],
+  Rosé: ["#3a1020", "#d4849a"],
+  Sparkling: ["#0a2030", "#6ab4d8"],
+  Dessert: ["#2a1a00", "#e8a030"],
+  Orange: ["#2a1800", "#d47820"],
+};
+
+function Input({ label, ...props }) {
+  return (
+    <div>
+      {label && <div style={{ fontSize: "10px", color: "#666", fontFamily: "monospace", letterSpacing: "1px", marginBottom: "5px", textTransform: "uppercase" }}>{label}</div>}
+      <input {...props} style={{
+        background: "#181818", border: "1px solid #2e2e2e",
+        borderRadius: "8px", padding: "9px 12px",
+        color: "#f0ebe0", fontSize: "13px", fontFamily: "monospace",
+        width: "100%", boxSizing: "border-box", outline: "none",
+        ...(props.style || {})
+      }} />
+    </div>
+  );
+}
+
+function Select({ label, children, ...props }) {
+  return (
+    <div>
+      {label && <div style={{ fontSize: "10px", color: "#666", fontFamily: "monospace", letterSpacing: "1px", marginBottom: "5px", textTransform: "uppercase" }}>{label}</div>}
+      <select {...props} style={{
+        background: "#181818", border: "1px solid #2e2e2e",
+        borderRadius: "8px", padding: "9px 12px",
+        color: "#f0ebe0", fontSize: "13px", fontFamily: "monospace",
+        width: "100%", boxSizing: "border-box", outline: "none",
+      }}>{children}</select>
+    </div>
+  );
+}
+
+function Textarea({ label, ...props }) {
+  return (
+    <div>
+      {label && <div style={{ fontSize: "10px", color: "#666", fontFamily: "monospace", letterSpacing: "1px", marginBottom: "5px", textTransform: "uppercase" }}>{label}</div>}
+      <textarea {...props} style={{
+        background: "#181818", border: "1px solid #2e2e2e",
+        borderRadius: "8px", padding: "9px 12px",
+        color: "#f0ebe0", fontSize: "13px", fontFamily: "monospace",
+        width: "100%", boxSizing: "border-box", outline: "none",
+        resize: "vertical", minHeight: "72px",
+        ...(props.style || {})
+      }} />
+    </div>
+  );
+}
+
+function Btn({ children, variant = "ghost", onClick, disabled, style = {} }) {
+  const base = {
+    border: "none", borderRadius: "9px", cursor: disabled ? "not-allowed" : "pointer",
+    fontFamily: "monospace", fontSize: "12px", padding: "9px 18px",
+    transition: "opacity 0.15s", opacity: disabled ? 0.5 : 1, ...style,
+  };
+  const variants = {
+    gold: { background: `linear-gradient(135deg, ${gold}, #a07830)`, color: "#fff", fontFamily: "'Playfair Display', serif", fontSize: "14px", fontWeight: 700 },
+    ghost: { background: "#242424", color: "#aaa", border: "1px solid #333" },
+    danger: { background: "#2a1010", color: "#c0392b", border: "1px solid #3a1515" },
+    outline: { background: "transparent", color: gold, border: `1px solid ${gold}` },
+  };
+  return <button onClick={onClick} disabled={disabled} style={{ ...base, ...variants[variant] }}>{children}</button>;
+}
+
+// ─── Tasting Card ─────────────────────────────────────────────────
+
+function TastingCard({ wine, onEdit, onDelete }) {
+  const both = wine.jmRating != null && wine.nickyRating != null;
+  const avg = both ? ((wine.jmRating + wine.nickyRating) / 2).toFixed(1) : (wine.jmRating ?? wine.nickyRating ?? null);
+  const [sc, tc] = styleColors[wine.style] || ["#222", "#888"];
+  return (
+    <div style={{
+      background: "linear-gradient(160deg, #1c1c1c 0%, #202020 100%)",
+      border: "1px solid #2a2a2a", borderRadius: "16px",
+      padding: "22px", position: "relative", overflow: "hidden",
+      transition: "transform 0.18s, box-shadow 0.18s",
+    }}
+      onMouseEnter={e => { e.currentTarget.style.transform = "translateY(-2px)"; e.currentTarget.style.boxShadow = "0 10px 36px rgba(0,0,0,0.45)"; }}
+      onMouseLeave={e => { e.currentTarget.style.transform = ""; e.currentTarget.style.boxShadow = ""; }}
+    >
+      <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: "3px", background: tc, opacity: 0.7 }} />
+      <div style={{ position: "absolute", top: "16px", right: "16px" }}>
+        <Badge label={wine.style} color={sc} text={tc} />
+      </div>
+
+      <div style={{ color: "#666", fontSize: "12px", fontFamily: "monospace", marginBottom: "3px" }}>
+        {wine.vintage || "NV"} · {wine.country}
+      </div>
+      <div style={{ fontFamily: "'Playfair Display', serif", fontSize: "20px", fontWeight: 700, color: "#f0ebe0", lineHeight: 1.2, marginBottom: "2px", paddingRight: "70px" }}>
+        {wine.name}
+      </div>
+      <div style={{ color: "#999", fontSize: "13px", marginBottom: "3px" }}>{wine.producer}</div>
+      <div style={{ color: "#555", fontSize: "11px", fontFamily: "monospace", marginBottom: "16px" }}>
+        {wine.grape}{wine.region ? ` · ${wine.region}` : ""}
+      </div>
+
+      <div style={{ display: "flex", gap: "20px", marginBottom: "14px" }}>
+        {[["JM", wine.jmRating, gold], ["NICKY", wine.nickyRating, blush], both && ["AVG", avg, "#f0ebe0"]].filter(Boolean).map(([lbl, val, col]) => (
+          <div key={lbl}>
+            <div style={{ fontSize: "9px", color: "#555", fontFamily: "monospace", letterSpacing: "1px", marginBottom: "2px" }}>{lbl}</div>
+            <div style={{ fontFamily: "'Playfair Display', serif", fontSize: "26px", fontWeight: 700, color: col }}>{val ?? "—"}</div>
+          </div>
+        ))}
+      </div>
+
+      {wine.notes && (
+        <div style={{ background: "#131313", borderLeft: `2px solid ${gold}`, padding: "9px 12px", borderRadius: "4px", fontSize: "12px", color: "#bbb", fontStyle: "italic", marginBottom: "12px", lineHeight: 1.5 }}>
+          {wine.notes}
+        </div>
+      )}
+
+      <div style={{ display: "flex", gap: "12px", flexWrap: "wrap", marginBottom: "10px" }}>
+        {wine.pairing && <span style={{ fontSize: "11px", color: "#666" }}>🍽 {wine.pairing}</span>}
+        {wine.price && <span style={{ fontSize: "11px", color: "#666" }}>💰 {wine.price}</span>}
+        {wine.date && <span style={{ fontSize: "11px", color: "#666" }}>📅 {wine.date}</span>}
+      </div>
+
+      <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+        {wine.buyAgain && <Badge label="✓ Buy Again" color="#0e2a1a" text="#4caf79" />}
+        <div style={{ marginLeft: "auto", display: "flex", gap: "6px" }}>
+          <Btn onClick={() => onEdit(wine)}>Edit</Btn>
+          <Btn variant="danger" onClick={() => onDelete(wine.id)}>✕</Btn>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Cellar Row ────────────────────────────────────────────────────
+
+function CellarRow({ wine, onEdit, onDelete, onQty }) {
+  const [sc, tc] = styleColors[wine.style] || ["#222", "#888"];
+  const currentYear = new Date().getFullYear();
+  const readyNow = wine.drinkFrom ? currentYear >= wine.drinkFrom : true;
+  const overdue = wine.drinkBy ? currentYear > wine.drinkBy : false;
+  return (
+    <div style={{
+      background: "#1a1a1a", border: "1px solid #272727",
+      borderRadius: "12px", padding: "14px 18px",
+      display: "flex", alignItems: "center", gap: "14px", flexWrap: "wrap",
+    }}>
+      <div style={{ width: "6px", height: "40px", borderRadius: "3px", background: tc, flexShrink: 0 }} />
+      <div style={{ flex: 1, minWidth: "160px" }}>
+        <div style={{ fontFamily: "'Playfair Display', serif", fontSize: "16px", color: "#f0ebe0", lineHeight: 1.2 }}>{wine.name}</div>
+        <div style={{ fontSize: "11px", color: "#666", fontFamily: "monospace" }}>
+          {wine.producer}{wine.vintage ? ` · ${wine.vintage}` : ""}{wine.region ? ` · ${wine.region}` : ""}
+        </div>
+      </div>
+
+      <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
+        {overdue && <Badge label="Drink now!" color="#3a1010" text="#e05050" />}
+        {!overdue && readyNow && wine.drinkBy && <Badge label="Ready" color="#0e2a1a" text="#4caf79" />}
+        {!readyNow && <Badge label={`From ${wine.drinkFrom}`} color="#1a1a2a" text="#6a8ad8" />}
+      </div>
+
+      <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+        <Btn onClick={() => onQty(wine.id, -1)} style={{ padding: "5px 12px", fontSize: "16px" }}>−</Btn>
+        <div style={{ fontFamily: "'Playfair Display', serif", fontSize: "22px", fontWeight: 700, color: gold, minWidth: "28px", textAlign: "center" }}>{wine.quantity}</div>
+        <Btn onClick={() => onQty(wine.id, 1)} style={{ padding: "5px 12px", fontSize: "16px" }}>+</Btn>
+      </div>
+
+      <div style={{ display: "flex", gap: "6px" }}>
+        <Btn onClick={() => onEdit(wine)} style={{ padding: "7px 13px" }}>Edit</Btn>
+        <Btn variant="danger" onClick={() => onDelete(wine.id)} style={{ padding: "7px 13px" }}>✕</Btn>
+      </div>
+    </div>
+  );
+}
+
+// ─── Tasting Form ─────────────────────────────────────────────────
+
+function TastingForm({ wine, onSave, onCancel }) {
+  const blank = {
+    name: "", producer: "", vintage: "", region: "", country: "France",
+    grape: "", style: "White", jmRating: "", nickyRating: "",
+    notes: "", pairing: "", price: "", location: "",
+    buyAgain: false, date: new Date().toISOString().split("T")[0], label: null,
+  };
+  const [form, setForm] = useState(wine ? { ...wine, vintage: wine.vintage ?? "", jmRating: wine.jmRating ?? "", nickyRating: wine.nickyRating ?? "" } : blank);
+  const [aiLoading, setAiLoading] = useState(false);
+  const fileRef = useRef();
+  const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
+
+  const handleImage = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => set("label", reader.result);
+    reader.readAsDataURL(file);
+  };
+
+  const handleAI = async () => {
+    if (!form.label) return;
+    setAiLoading(true);
+    try {
+      const imgData = form.label.includes(",") ? form.label.split(",")[1] : form.label;
+      const res = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model: "claude-sonnet-4-20250514",
+          max_tokens: 500,
+          messages: [{
+            role: "user",
+            content: [
+              { type: "image", source: { type: "base64", media_type: "image/jpeg", data: imgData } },
+              { type: "text", text: `Read this wine label. Return ONLY valid JSON, no markdown:
+{"name":"wine name only","producer":"winery/producer","vintage":2024,"region":"region","country":"country","grape":"grape or blend","style":"Red|White|Rosé|Sparkling|Dessert|Orange"}
+Use null for unknown fields.` }
+            ]
+          }]
+        })
+      });
+      const data = await res.json();
+      const raw = data.content.map(c => c.text || "").join("").replace(/```json|```/g, "").trim();
+      const parsed = JSON.parse(raw);
+      setForm(f => ({
+        ...f,
+        ...Object.fromEntries(Object.entries(parsed).filter(([, v]) => v != null)),
+        vintage: parsed.vintage ?? f.vintage,
+      }));
+    } catch (e) {
+      alert("Couldn't read the label — please fill in manually.");
+    }
+    setAiLoading(false);
+  };
+
+  const handleSave = () => {
+    if (!form.name.trim()) return alert("Wine name is required.");
+    onSave({
+      ...form,
+      id: form.id || `t${Date.now()}`,
+      vintage: form.vintage ? parseInt(form.vintage) : null,
+      jmRating: form.jmRating !== "" ? parseFloat(form.jmRating) : null,
+      nickyRating: form.nickyRating !== "" ? parseFloat(form.nickyRating) : null,
+    });
+  };
+
+  return (
+    <Modal title={wine ? "Edit tasting" : "Log a tasting"} onClose={onCancel}>
+      <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
+        {/* Label upload */}
+        <div>
+          <div style={{ fontSize: "10px", color: "#666", fontFamily: "monospace", letterSpacing: "1px", marginBottom: "6px", textTransform: "uppercase" }}>Label photo</div>
+          <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+            <Btn onClick={() => fileRef.current.click()} style={{ background: "#242424", border: "1px dashed #444", color: "#aaa" }}>📷 Upload</Btn>
+            {form.label && (
+              <Btn variant="outline" onClick={handleAI} disabled={aiLoading}>
+                {aiLoading ? "Reading…" : "✨ Auto-fill from label"}
+              </Btn>
+            )}
+          </div>
+          <input ref={fileRef} type="file" accept="image/*" onChange={handleImage} style={{ display: "none" }} />
+          {form.label && <img src={form.label} alt="" style={{ marginTop: "10px", height: "100px", borderRadius: "8px", objectFit: "contain", border: "1px solid #333" }} />}
+        </div>
+
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
+          <div style={{ gridColumn: "1/-1" }}><Input label="Wine Name *" value={form.name} onChange={e => set("name", e.target.value)} placeholder="e.g. Petit Chablis" /></div>
+          <Input label="Producer / Winery" value={form.producer} onChange={e => set("producer", e.target.value)} />
+          <Input label="Vintage" type="number" value={form.vintage} onChange={e => set("vintage", e.target.value)} placeholder="2024" />
+          <Input label="Region" value={form.region} onChange={e => set("region", e.target.value)} />
+          <Select label="Country" value={form.country} onChange={e => set("country", e.target.value)}>
+            {COUNTRIES.map(c => <option key={c}>{c}</option>)}
+          </Select>
+          <Input label="Grape / Blend" value={form.grape} onChange={e => set("grape", e.target.value)} />
+          <Select label="Style" value={form.style} onChange={e => set("style", e.target.value)}>
+            {STYLES.map(s => <option key={s}>{s}</option>)}
+          </Select>
+        </div>
+
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
+          <Input label="JM Rating /10" type="number" min="0" max="10" step="0.5" value={form.jmRating} onChange={e => set("jmRating", e.target.value)} placeholder="0–10" />
+          <Input label="Nicky Rating /10" type="number" min="0" max="10" step="0.5" value={form.nickyRating} onChange={e => set("nickyRating", e.target.value)} placeholder="0–10" />
+        </div>
+
+        <Textarea label="Tasting Notes" value={form.notes} onChange={e => set("notes", e.target.value)} placeholder="What did you taste? What stood out?" />
+
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
+          <Input label="Food Pairing" value={form.pairing} onChange={e => set("pairing", e.target.value)} />
+          <Input label="Price" value={form.price} onChange={e => set("price", e.target.value)} placeholder="e.g. $66" />
+          <Input label="Where" value={form.location} onChange={e => set("location", e.target.value)} />
+          <Input label="Date" type="date" value={form.date} onChange={e => set("date", e.target.value)} />
+        </div>
+
+        <label style={{ display: "flex", alignItems: "center", gap: "10px", cursor: "pointer" }}>
+          <input type="checkbox" checked={form.buyAgain} onChange={e => set("buyAgain", e.target.checked)} style={{ width: "16px", height: "16px", accentColor: gold }} />
+          <span style={{ color: "#aaa", fontSize: "13px", fontFamily: "monospace" }}>Would buy again</span>
+        </label>
+
+        <div style={{ display: "flex", gap: "10px", justifyContent: "flex-end", paddingTop: "6px" }}>
+          <Btn onClick={onCancel}>Cancel</Btn>
+          <Btn variant="gold" onClick={handleSave}>Save</Btn>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+// ─── Cellar Form ──────────────────────────────────────────────────
+
+function CellarForm({ wine, onSave, onCancel }) {
+  const blank = {
+    name: "", producer: "", vintage: "", region: "", country: "Australia",
+    grape: "", style: "Red", quantity: 1, drinkFrom: "", drinkBy: "",
+    price: "", location: "John's Cellar", notes: "",
+    dateAdded: new Date().toISOString().split("T")[0],
+  };
+  const [form, setForm] = useState(wine ? {
+    ...wine,
+    vintage: wine.vintage ?? "",
+    drinkFrom: wine.drinkFrom ?? "",
+    drinkBy: wine.drinkBy ?? "",
+  } : blank);
+  const [aiLoading, setAiLoading] = useState(false);
+  const [labelImg, setLabelImg] = useState(null);
+  const fileRef = useRef();
+  const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
+
+  const handleImage = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => setLabelImg(reader.result);
+    reader.readAsDataURL(file);
+  };
+
+  const handleAI = async () => {
+    if (!labelImg) return;
+    setAiLoading(true);
+    try {
+      const imgData = labelImg.includes(",") ? labelImg.split(",")[1] : labelImg;
+      const res = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model: "claude-sonnet-4-20250514",
+          max_tokens: 500,
+          messages: [{
+            role: "user",
+            content: [
+              { type: "image", source: { type: "base64", media_type: "image/jpeg", data: imgData } },
+              { type: "text", text: `Read this wine label. Return ONLY valid JSON, no markdown:
+{"name":"wine name only","producer":"winery/producer","vintage":2024,"region":"region","country":"country","grape":"grape or blend","style":"Red|White|Rosé|Sparkling|Dessert|Orange"}
+Use null for unknown fields.` }
+            ]
+          }]
+        })
+      });
+      const data = await res.json();
+      const raw = data.content.map(c => c.text || "").join("").replace(/```json|```/g, "").trim();
+      const parsed = JSON.parse(raw);
+      setForm(f => ({
+        ...f,
+        ...Object.fromEntries(Object.entries(parsed).filter(([, v]) => v != null)),
+        vintage: parsed.vintage ?? f.vintage,
+      }));
+    } catch {
+      alert("Couldn't read the label — please fill in manually.");
+    }
+    setAiLoading(false);
+  };
+
+  const handleSave = () => {
+    if (!form.name.trim()) return alert("Wine name is required.");
+    onSave({
+      ...form,
+      id: form.id || `c${Date.now()}`,
+      vintage: form.vintage ? parseInt(form.vintage) : null,
+      drinkFrom: form.drinkFrom ? parseInt(form.drinkFrom) : null,
+      drinkBy: form.drinkBy ? parseInt(form.drinkBy) : null,
+      quantity: parseInt(form.quantity) || 1,
+    });
+  };
+
+  return (
+    <Modal title={wine ? "Edit cellar entry" : "Add to cellar"} onClose={onCancel}>
+      <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
+        <div>
+          <div style={{ fontSize: "10px", color: "#666", fontFamily: "monospace", letterSpacing: "1px", marginBottom: "6px", textTransform: "uppercase" }}>Label photo (optional)</div>
+          <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+            <Btn onClick={() => fileRef.current.click()} style={{ background: "#242424", border: "1px dashed #444", color: "#aaa" }}>📷 Upload</Btn>
+            {labelImg && <Btn variant="outline" onClick={handleAI} disabled={aiLoading}>{aiLoading ? "Reading…" : "✨ Auto-fill from label"}</Btn>}
+          </div>
+          <input ref={fileRef} type="file" accept="image/*" onChange={handleImage} style={{ display: "none" }} />
+          {labelImg && <img src={labelImg} alt="" style={{ marginTop: "10px", height: "90px", borderRadius: "8px", objectFit: "contain", border: "1px solid #333" }} />}
+        </div>
+
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
+          <div style={{ gridColumn: "1/-1" }}><Input label="Wine Name *" value={form.name} onChange={e => set("name", e.target.value)} /></div>
+          <Input label="Producer" value={form.producer} onChange={e => set("producer", e.target.value)} />
+          <Input label="Vintage" type="number" value={form.vintage} onChange={e => set("vintage", e.target.value)} placeholder="e.g. 2019" />
+          <Input label="Region" value={form.region} onChange={e => set("region", e.target.value)} />
+          <Select label="Country" value={form.country} onChange={e => set("country", e.target.value)}>
+            {COUNTRIES.map(c => <option key={c}>{c}</option>)}
+          </Select>
+          <Input label="Grape / Blend" value={form.grape} onChange={e => set("grape", e.target.value)} />
+          <Select label="Style" value={form.style} onChange={e => set("style", e.target.value)}>
+            {STYLES.map(s => <option key={s}>{s}</option>)}
+          </Select>
+          <Input label="Quantity (bottles)" type="number" min="1" value={form.quantity} onChange={e => set("quantity", e.target.value)} />
+          <Input label="Drink From (year)" type="number" value={form.drinkFrom} onChange={e => set("drinkFrom", e.target.value)} placeholder="e.g. 2026" />
+          <Input label="Drink By (year)" type="number" value={form.drinkBy} onChange={e => set("drinkBy", e.target.value)} placeholder="e.g. 2032" />
+          <Input label="Price Paid" value={form.price} onChange={e => set("price", e.target.value)} placeholder="e.g. $120" />
+          <Input label="Storage Location" value={form.location} onChange={e => set("location", e.target.value)} />
+        </div>
+
+        <Textarea label="Notes" value={form.notes} onChange={e => set("notes", e.target.value)} />
+
+        <div style={{ display: "flex", gap: "10px", justifyContent: "flex-end", paddingTop: "6px" }}>
+          <Btn onClick={onCancel}>Cancel</Btn>
+          <Btn variant="gold" onClick={handleSave}>Save</Btn>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+// ─── Modal ────────────────────────────────────────────────────────
+
+function Modal({ title, children, onClose }) {
+  return (
+    <div style={{
+      position: "fixed", inset: 0, background: "rgba(0,0,0,0.88)",
+      zIndex: 1000, overflowY: "auto", padding: "24px 16px",
+      display: "flex", justifyContent: "center", alignItems: "flex-start",
+    }}>
+      <div style={{
+        background: "#181818", border: "1px solid #2a2a2a",
+        borderRadius: "20px", padding: "28px 26px",
+        width: "100%", maxWidth: "580px", position: "relative",
+      }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "22px" }}>
+          <div style={{ fontFamily: "'Playfair Display', serif", fontSize: "22px", color: "#f0ebe0" }}>{title}</div>
+          <button onClick={onClose} style={{ background: "none", border: "none", color: "#666", fontSize: "20px", cursor: "pointer" }}>✕</button>
+        </div>
+        {children}
+      </div>
+    </div>
+  );
+}
+
+// ─── Tab nav ──────────────────────────────────────────────────────
+
+function TabBar({ active, onChange }) {
+  return (
+    <div style={{ display: "flex", borderBottom: "1px solid #1e1e1e", padding: "0 20px" }}>
+      {[["tastings", "🍷 Tastings"], ["cellar", "🏠 Cellar"], ["stats", "📊 Stats"], ["sommelier", "🧑‍🍳 Sommelier"]].map(([key, label]) => (
+        <button key={key} onClick={() => onChange(key)} style={{
+          background: "none", border: "none", cursor: "pointer",
+          padding: "14px 20px", fontSize: "13px", fontFamily: "monospace",
+          color: active === key ? gold : "#666",
+          borderBottom: active === key ? `2px solid ${gold}` : "2px solid transparent",
+          marginBottom: "-1px", transition: "color 0.15s",
+        }}>{label}</button>
+      ))}
+    </div>
+  );
+}
+
+// ─── Stats ────────────────────────────────────────────────────────
+
+function Stats({ tastings, cellar }) {
+  const rated = tastings.filter(w => w.jmRating != null || w.nickyRating != null);
+  const avgJM = rated.filter(w => w.jmRating).length
+    ? (rated.filter(w => w.jmRating).reduce((s, w) => s + w.jmRating, 0) / rated.filter(w => w.jmRating).length).toFixed(1)
+    : "—";
+  const avgNicky = rated.filter(w => w.nickyRating).length
+    ? (rated.filter(w => w.nickyRating).reduce((s, w) => s + w.nickyRating, 0) / rated.filter(w => w.nickyRating).length).toFixed(1)
+    : "—";
+  const totalBottles = cellar.reduce((s, w) => s + (w.quantity || 0), 0);
+  const byStyle = STYLES.map(s => ({ s, count: tastings.filter(w => w.style === s).length })).filter(x => x.count > 0).sort((a, b) => b.count - a.count);
+  const byCountry = [...new Set(tastings.map(w => w.country))].map(c => ({ c, count: tastings.filter(w => w.country === c).length })).sort((a, b) => b.count - a.count).slice(0, 6);
+  const top = [...tastings].filter(w => w.jmRating && w.nickyRating).sort((a, b) => ((b.jmRating + b.nickyRating) / 2) - ((a.jmRating + a.nickyRating) / 2)).slice(0, 3);
+
+  const StatCard = ({ label, value, color }) => (
+    <div style={{ background: "#1a1a1a", border: "1px solid #272727", borderRadius: "12px", padding: "16px 20px", textAlign: "center" }}>
+      <div style={{ fontFamily: "'Playfair Display', serif", fontSize: "32px", fontWeight: 700, color: color || "#f0ebe0" }}>{value}</div>
+      <div style={{ fontSize: "10px", color: "#555", fontFamily: "monospace", letterSpacing: "1px", marginTop: "4px", textTransform: "uppercase" }}>{label}</div>
+    </div>
+  );
+
+  return (
+    <div style={{ padding: "24px", maxWidth: "900px", margin: "0 auto" }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))", gap: "12px", marginBottom: "28px" }}>
+        <StatCard label="Wines Tasted" value={tastings.length} />
+        <StatCard label="JM Avg" value={avgJM} color={gold} />
+        <StatCard label="Nicky Avg" value={avgNicky} color={blush} />
+        <StatCard label="Buy Again" value={tastings.filter(w => w.buyAgain).length} color="#4caf79" />
+        <StatCard label="In Cellar" value={totalBottles} />
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "20px", marginBottom: "28px" }}>
+        <div style={{ background: "#1a1a1a", border: "1px solid #272727", borderRadius: "12px", padding: "18px 20px" }}>
+          <div style={{ fontSize: "11px", color: "#666", fontFamily: "monospace", letterSpacing: "1px", marginBottom: "14px", textTransform: "uppercase" }}>By Style</div>
+          {byStyle.map(({ s, count }) => {
+            const [, tc] = styleColors[s] || ["#222", "#888"];
+            const pct = Math.round((count / tastings.length) * 100);
+            return (
+              <div key={s} style={{ marginBottom: "10px" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", fontSize: "12px", color: "#aaa", fontFamily: "monospace", marginBottom: "4px" }}>
+                  <span>{s}</span><span>{count}</span>
+                </div>
+                <div style={{ background: "#111", borderRadius: "4px", height: "6px" }}>
+                  <div style={{ background: tc, height: "6px", borderRadius: "4px", width: `${pct}%`, transition: "width 0.5s" }} />
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        <div style={{ background: "#1a1a1a", border: "1px solid #272727", borderRadius: "12px", padding: "18px 20px" }}>
+          <div style={{ fontSize: "11px", color: "#666", fontFamily: "monospace", letterSpacing: "1px", marginBottom: "14px", textTransform: "uppercase" }}>By Country</div>
+          {byCountry.map(({ c, count }) => {
+            const pct = Math.round((count / tastings.length) * 100);
+            return (
+              <div key={c} style={{ marginBottom: "10px" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", fontSize: "12px", color: "#aaa", fontFamily: "monospace", marginBottom: "4px" }}>
+                  <span>{c}</span><span>{count}</span>
+                </div>
+                <div style={{ background: "#111", borderRadius: "4px", height: "6px" }}>
+                  <div style={{ background: gold, height: "6px", borderRadius: "4px", width: `${pct}%`, opacity: 0.7, transition: "width 0.5s" }} />
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {top.length > 0 && (
+        <div style={{ background: "#1a1a1a", border: "1px solid #272727", borderRadius: "12px", padding: "18px 20px" }}>
+          <div style={{ fontSize: "11px", color: "#666", fontFamily: "monospace", letterSpacing: "1px", marginBottom: "14px", textTransform: "uppercase" }}>Top Rated (Both)</div>
+          {top.map((w, i) => (
+            <div key={w.id} style={{ display: "flex", alignItems: "center", gap: "14px", padding: "10px 0", borderBottom: i < top.length - 1 ? "1px solid #222" : "none" }}>
+              <div style={{ fontFamily: "'Playfair Display', serif", fontSize: "22px", color: gold, width: "28px" }}>{i + 1}</div>
+              <div style={{ flex: 1 }}>
+                <div style={{ color: "#f0ebe0", fontSize: "14px" }}>{w.name}</div>
+                <div style={{ color: "#666", fontSize: "11px", fontFamily: "monospace" }}>{w.producer} · {w.vintage || "NV"}</div>
+              </div>
+              <div style={{ fontFamily: "'Playfair Display', serif", fontSize: "22px", fontWeight: 700, color: "#f0ebe0" }}>
+                {((w.jmRating + w.nickyRating) / 2).toFixed(1)}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Sommelier ────────────────────────────────────────────────────
+
+function Sommelier({ tastings }) {
+  const [mode, setMode] = useState("ask");
+  const [messages, setMessages] = useState([]);
+  const [input, setInput] = useState("");
+  const [dish, setDish] = useState("");
+  const [restaurant, setRestaurant] = useState("");
+  const [wineListImg, setWineListImg] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const chatRef = useRef();
+  const fileRef = useRef();
+
+  useEffect(() => {
+    if (chatRef.current) chatRef.current.scrollTop = chatRef.current.scrollHeight;
+  }, [messages, loading]);
+
+  const preferenceProfile = () => {
+    if (!tastings.length) return "";
+    const rated = tastings.filter(w => w.jmRating || w.nickyRating);
+    const top = [...rated]
+      .sort((a, b) => {
+        const avg = w => ((w.jmRating || 0) + (w.nickyRating || 0)) / ((w.jmRating ? 1 : 0) + (w.nickyRating ? 1 : 0) || 1);
+        return avg(b) - avg(a);
+      })
+      .slice(0, 6)
+      .map(w => `${w.name} by ${w.producer} (${w.grape}, rated ${w.jmRating ?? w.nickyRating}/10)`);
+    const buyAgain = tastings.filter(w => w.buyAgain).map(w => `${w.name} (${w.grape})`).slice(0, 5);
+    const styleCounts = {};
+    tastings.forEach(w => { if (w.style) styleCounts[w.style] = (styleCounts[w.style] || 0) + 1; });
+    const favStyles = Object.entries(styleCounts).sort((a, b) => b[1] - a[1]).map(([s]) => s);
+    const regions = [...new Set(tastings.map(w => w.region).filter(Boolean))].slice(0, 6);
+    return [
+      top.length ? `Favourite wines: ${top.join("; ")}` : "",
+      buyAgain.length ? `Would buy again: ${buyAgain.join(", ")}` : "",
+      favStyles.length ? `Preferred styles: ${favStyles.join(", ")}` : "",
+      regions.length ? `Familiar regions: ${regions.join(", ")}` : "",
+    ].filter(Boolean).join("\n");
+  };
+
+  const system = (m) => {
+    const prefs = preferenceProfile();
+    const base = `You are an expert sommelier with deep knowledge of wine regions, grapes, vintages, and food pairing. You're advising JM and Nicky, a couple who love wine.${prefs ? `\n\nTheir wine profile:\n${prefs}` : ""}\n\nBe specific, concise, and conversational. Use bullet points or numbered lists where helpful. Highlight producer names and wine names in bold.`;
+    if (m === "meal") return base + "\n\nFor meal pairing: recommend 2–3 specific wines (producer, grape, region, approx price), explain why each works with the dish, and note which best suits their preferences.";
+    if (m === "restaurant") return base + "\n\nFor restaurant pairing: read the wine list carefully, recommend 2–3 wines from it for the specified dish, quote wine names exactly as they appear on the list, explain each pairing, and name your top pick clearly.";
+    return base;
+  };
+
+  const callClaude = async (msgs, sys) => {
+    const res = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ model: "claude-sonnet-4-20250514", max_tokens: 1024, system: sys, messages: msgs }),
+    });
+    if (!res.ok) throw new Error(`API error ${res.status}`);
+    const data = await res.json();
+    return data.content?.map(c => c.text || "").join("") || "No response received.";
+  };
+
+  const push = (role, text, extras = {}) =>
+    setMessages(prev => [...prev, { role, text, ...extras }]);
+
+  const handleAsk = async () => {
+    if (!input.trim() || loading) return;
+    const text = input.trim();
+    setInput("");
+    push("user", text, { mode: "ask" });
+    setLoading(true);
+    try {
+      const history = [...messages.filter(m => m.mode === "ask"), { role: "user", text, mode: "ask" }]
+        .map(m => ({ role: m.role, content: m.text }));
+      const reply = await callClaude(history, system("ask"));
+      push("assistant", reply, { mode: "ask" });
+    } catch {
+      push("assistant", "Sorry, I couldn't reach the sommelier. Please try again.", { mode: "ask", isError: true });
+    }
+    setLoading(false);
+  };
+
+  const handleMealPairing = async () => {
+    if (!dish.trim() || loading) return;
+    const text = `I'm planning to cook: ${dish.trim()}. What wines would you recommend?`;
+    push("user", `🍽 ${dish.trim()}`, { mode: "meal" });
+    setDish("");
+    setLoading(true);
+    try {
+      const reply = await callClaude([{ role: "user", content: text }], system("meal"));
+      push("assistant", reply, { mode: "meal" });
+    } catch {
+      push("assistant", "Sorry, I couldn't reach the sommelier. Please try again.", { mode: "meal", isError: true });
+    }
+    setLoading(false);
+  };
+
+  const handleRestaurantPairing = async () => {
+    if (loading || (!dish.trim() && !wineListImg)) return;
+    const summary = [restaurant && `📍 ${restaurant}`, dish && `🍽 ${dish}`, wineListImg && "📷 Wine list attached"].filter(Boolean).join("  ·  ");
+    push("user", summary, { mode: "restaurant", hasImage: !!wineListImg });
+    setLoading(true);
+    try {
+      const content = [];
+      if (wineListImg) {
+        const imgData = wineListImg.includes(",") ? wineListImg.split(",")[1] : wineListImg;
+        content.push({ type: "image", source: { type: "base64", media_type: "image/jpeg", data: imgData } });
+      }
+      const parts = [];
+      if (restaurant) parts.push(`Restaurant: ${restaurant}`);
+      if (dish) parts.push(`My dish: ${dish}`);
+      parts.push(wineListImg ? "Read the wine list in the image and recommend the best pairings for my dish." : "Suggest wines that would pair well with my dish.");
+      content.push({ type: "text", text: parts.join("\n") });
+      const reply = await callClaude([{ role: "user", content }], system("restaurant"));
+      push("assistant", reply, { mode: "restaurant" });
+    } catch {
+      push("assistant", "Sorry, I couldn't reach the sommelier. Please try again.", { mode: "restaurant", isError: true });
+    }
+    setLoading(false);
+  };
+
+  const renderText = (text) =>
+    text.split("\n").map((line, i) => {
+      const isBullet = /^[-•*]\s/.test(line);
+      const isNumbered = /^\d+\.\s/.test(line);
+      const isHeader = /^#{1,3}\s/.test(line);
+      const stripped = line.replace(/^#{1,3}\s/, "").replace(/^[-•*\d.]\s*/, "");
+      const parts = stripped.split(/(\*\*[^*]+\*\*)/g).map((p, j) =>
+        p.startsWith("**") && p.endsWith("**")
+          ? <strong key={j} style={{ color: gold }}>{p.slice(2, -2)}</strong>
+          : p
+      );
+      return (
+        <div key={i} style={{
+          marginBottom: isHeader ? "8px" : (isBullet || isNumbered) ? "5px" : "2px",
+          paddingLeft: (isBullet || isNumbered) ? "16px" : 0,
+          fontSize: isHeader ? "14px" : "13px",
+          color: isHeader ? "#f0ebe0" : "#c0b8a8",
+          fontWeight: isHeader ? 700 : 400,
+          fontFamily: isHeader ? "'Playfair Display', serif" : "monospace",
+          lineHeight: 1.65, position: "relative",
+        }}>
+          {(isBullet || isNumbered) && (
+            <span style={{ position: "absolute", left: 0, color: gold }}>
+              {isBullet ? "·" : (line.match(/^\d+/) || [""])[0] + "."}
+            </span>
+          )}
+          {parts}
+        </div>
+      );
+    });
+
+  const modeInfo = {
+    ask:        { label: "💬 Ask Anything",    placeholder: "Ask about regions, grapes, vintages, serving temps…",   empty: ["Ask me anything about wine", "Regions, grapes, vintages, serving temperatures…"] },
+    meal:       { label: "🍽 Meal Pairing",    placeholder: "",                                                        empty: ["Tell me what you're cooking", "I'll suggest wines matched to your preferences"] },
+    restaurant: { label: "🍾 Restaurant List", placeholder: "",                                                        empty: ["Share the wine list and your dish", "Upload a photo of the wine list for the best results"] },
+  };
+
+  return (
+    <div style={{ maxWidth: "900px", margin: "0 auto", padding: "20px" }}>
+      {/* Header */}
+      <div style={{ marginBottom: "22px" }}>
+        <div style={{ fontSize: "10px", letterSpacing: "4px", color: gold, fontFamily: "monospace", marginBottom: "6px" }}>POWERED BY YOUR TASTING HISTORY</div>
+        <div style={{ fontFamily: "'Playfair Display', serif", fontSize: "28px", fontWeight: 700, color: "#f0ebe0" }}>Virtual Sommelier</div>
+        <div style={{ fontSize: "11px", color: "#444", fontFamily: "monospace", marginTop: "3px" }}>{tastings.length} wines on record · preferences personalised</div>
+      </div>
+
+      {/* Mode selector */}
+      <div style={{ display: "flex", gap: "8px", marginBottom: "20px", flexWrap: "wrap", alignItems: "center" }}>
+        {Object.entries(modeInfo).map(([m, { label }]) => (
+          <button key={m} onClick={() => setMode(m)} style={{
+            background: mode === m ? gold : "#1a1a1a",
+            border: `1px solid ${mode === m ? gold : "#2e2e2e"}`,
+            borderRadius: "20px", padding: "8px 18px",
+            color: mode === m ? "#111" : "#888",
+            cursor: "pointer", fontSize: "12px", fontFamily: "monospace",
+            fontWeight: mode === m ? 700 : 400, transition: "all 0.15s",
+          }}>{label}</button>
+        ))}
+        {messages.length > 0 && (
+          <button onClick={() => setMessages([])} style={{
+            marginLeft: "auto", background: "transparent", border: "1px solid #252525",
+            borderRadius: "20px", padding: "8px 14px", color: "#444",
+            cursor: "pointer", fontSize: "11px", fontFamily: "monospace",
+          }}>Clear chat</button>
+        )}
+      </div>
+
+      {/* Chat display */}
+      <div ref={chatRef} style={{
+        display: "flex", flexDirection: "column", gap: "14px",
+        minHeight: "140px", maxHeight: "500px", overflowY: "auto",
+        marginBottom: "16px",
+      }}>
+        {messages.length === 0 && !loading && (
+          <div style={{ textAlign: "center", padding: "52px 20px" }}>
+            <div style={{ fontFamily: "'Playfair Display', serif", fontSize: "18px", color: "#2a2a2a", marginBottom: "8px" }}>
+              {modeInfo[mode].empty[0]}
+            </div>
+            <div style={{ fontSize: "11px", color: "#2e2e2e", fontFamily: "monospace" }}>
+              {modeInfo[mode].empty[1]}
+            </div>
+          </div>
+        )}
+
+        {messages.map((msg, i) => (
+          <div key={i} style={{ display: "flex", justifyContent: msg.role === "user" ? "flex-end" : "flex-start", gap: "10px", alignItems: "flex-start" }}>
+            {msg.role === "assistant" && (
+              <div style={{
+                width: "32px", height: "32px", borderRadius: "50%", flexShrink: 0,
+                background: `linear-gradient(135deg, ${gold}, #a07830)`,
+                display: "flex", alignItems: "center", justifyContent: "center",
+                fontSize: "15px", marginTop: "2px",
+              }}>🍷</div>
+            )}
+            <div style={{
+              maxWidth: "78%",
+              background: msg.role === "user"
+                ? "linear-gradient(135deg, rgba(201,168,76,0.1), rgba(201,168,76,0.05))"
+                : "#1a1a1a",
+              border: `1px solid ${msg.role === "user" ? "rgba(201,168,76,0.2)" : "#272727"}`,
+              borderRadius: msg.role === "user" ? "16px 16px 4px 16px" : "4px 16px 16px 16px",
+              padding: "12px 16px",
+            }}>
+              {msg.role === "assistant"
+                ? renderText(msg.text)
+                : <div style={{ fontSize: "13px", color: "#e0d8c8", fontFamily: "monospace", lineHeight: 1.5 }}>
+                    {msg.hasImage && <span style={{ fontSize: "11px", color: "#666", display: "block", marginBottom: "4px" }}>📷 Wine list attached</span>}
+                    {msg.text}
+                  </div>
+              }
+            </div>
+          </div>
+        ))}
+
+        {loading && (
+          <div style={{ display: "flex", gap: "10px", alignItems: "flex-start" }}>
+            <div style={{
+              width: "32px", height: "32px", borderRadius: "50%",
+              background: `linear-gradient(135deg, ${gold}, #a07830)`,
+              display: "flex", alignItems: "center", justifyContent: "center", fontSize: "15px",
+            }}>🍷</div>
+            <div style={{ background: "#1a1a1a", border: "1px solid #272727", borderRadius: "4px 16px 16px 16px", padding: "14px 18px" }}>
+              <div style={{ display: "flex", gap: "5px", alignItems: "center" }}>
+                {[0, 1, 2].map(j => (
+                  <div key={j} style={{
+                    width: "6px", height: "6px", borderRadius: "50%", background: gold,
+                    animation: `somm-pulse 1.2s ease-in-out ${j * 0.2}s infinite`,
+                  }} />
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* ── Ask mode ── */}
+      {mode === "ask" && (
+        <div style={{ display: "flex", gap: "10px" }}>
+          <input
+            value={input} onChange={e => setInput(e.target.value)}
+            onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleAsk(); } }}
+            placeholder={modeInfo.ask.placeholder}
+            disabled={loading}
+            style={{
+              flex: 1, background: "#161616", border: "1px solid #2a2a2a",
+              borderRadius: "12px", padding: "12px 16px", color: "#f0ebe0",
+              fontSize: "13px", fontFamily: "monospace", outline: "none",
+            }}
+          />
+          <Btn variant="gold" onClick={handleAsk} disabled={loading || !input.trim()} style={{ padding: "12px 26px" }}>Ask</Btn>
+        </div>
+      )}
+
+      {/* ── Meal Pairing mode ── */}
+      {mode === "meal" && (
+        <div style={{ background: "#161616", border: "1px solid #222", borderRadius: "16px", padding: "18px" }}>
+          <Textarea
+            label="What are you cooking?"
+            value={dish} onChange={e => setDish(e.target.value)}
+            placeholder="e.g. Slow-braised lamb shoulder with rosemary and garlic, roasted root vegetables"
+            style={{ minHeight: "64px" }}
+          />
+          <div style={{ display: "flex", justifyContent: "flex-end", marginTop: "12px" }}>
+            <Btn variant="gold" onClick={handleMealPairing} disabled={loading || !dish.trim()}>Get Recommendations</Btn>
+          </div>
+        </div>
+      )}
+
+      {/* ── Restaurant mode ── */}
+      {mode === "restaurant" && (
+        <div style={{ background: "#161616", border: "1px solid #222", borderRadius: "16px", padding: "18px", display: "flex", flexDirection: "column", gap: "14px" }}>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
+            <Input label="Restaurant Name" value={restaurant} onChange={e => setRestaurant(e.target.value)} placeholder="e.g. Quay, Sydney" />
+            <Input label="Your Dish" value={dish} onChange={e => setDish(e.target.value)} placeholder="e.g. Pan-seared barramundi" />
+          </div>
+          <div>
+            <div style={{ fontSize: "10px", color: "#666", fontFamily: "monospace", letterSpacing: "1px", marginBottom: "8px", textTransform: "uppercase" }}>Wine List Photo</div>
+            <div style={{ display: "flex", gap: "10px", alignItems: "center", flexWrap: "wrap" }}>
+              <Btn onClick={() => fileRef.current.click()} style={{ background: "#242424", border: "1px dashed #444", color: "#aaa" }}>📷 Upload Wine List</Btn>
+              {wineListImg && <>
+                <span style={{ fontSize: "11px", color: "#4caf79", fontFamily: "monospace" }}>✓ Photo ready</span>
+                <button onClick={() => setWineListImg(null)} style={{ background: "none", border: "none", color: "#555", cursor: "pointer", fontSize: "11px", fontFamily: "monospace" }}>Remove</button>
+              </>}
+            </div>
+            <input ref={fileRef} type="file" accept="image/*" capture="environment"
+              onChange={e => { const f = e.target.files[0]; if (!f) return; const r = new FileReader(); r.onload = () => setWineListImg(r.result); r.readAsDataURL(f); }}
+              style={{ display: "none" }} />
+            {wineListImg && <img src={wineListImg} alt="Wine list" style={{ marginTop: "10px", maxHeight: "160px", borderRadius: "8px", objectFit: "contain", border: "1px solid #2a2a2a" }} />}
+          </div>
+          <div style={{ display: "flex", justifyContent: "flex-end" }}>
+            <Btn variant="gold" onClick={handleRestaurantPairing} disabled={loading || (!dish.trim() && !wineListImg)}>Get Pairing</Btn>
+          </div>
+        </div>
+      )}
+
+      <style>{`
+        @keyframes somm-pulse {
+          0%, 80%, 100% { opacity: 0.2; transform: scale(0.8); }
+          40%            { opacity: 1;   transform: scale(1.1); }
+        }
+      `}</style>
+    </div>
+  );
+}
+
+// ─── Splash Screen ────────────────────────────────────────────────
+
+function SplashScreen({ onEnter }) {
+  const [visible, setVisible] = useState(false);
+  useEffect(() => { const t = setTimeout(() => setVisible(true), 50); return () => clearTimeout(t); }, []);
+
+  const handleEnter = () => {
+    setVisible(false);
+    setTimeout(onEnter, 700);
+  };
+
+  const rows = 14;
+  const vp = { x: 400, y: 210 };
+
+  return (
+    <div style={{
+      position: "fixed", inset: 0, zIndex: 2000, overflow: "hidden",
+      display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
+      opacity: visible ? 1 : 0, transition: "opacity 0.7s ease",
+    }}>
+      {/* Sky gradient */}
+      <div style={{
+        position: "absolute", inset: 0,
+        background: "linear-gradient(180deg, #04050e 0%, #0a0818 18%, #1a0e08 42%, #0e1a06 62%, #060e04 100%)",
+      }} />
+
+      {/* Stars */}
+      {[...Array(60)].map((_, i) => {
+        const x = (i * 137.5) % 100;
+        const y = (i * 97.3) % 45;
+        const size = i % 5 === 0 ? 1.5 : 0.8;
+        return (
+          <div key={i} style={{
+            position: "absolute", borderRadius: "50%",
+            left: `${x}%`, top: `${y}%`,
+            width: `${size}px`, height: `${size}px`,
+            background: "#fff", opacity: 0.2 + (i % 4) * 0.15,
+          }} />
+        );
+      })}
+
+      {/* Vineyard SVG */}
+      <svg viewBox="0 0 800 450" preserveAspectRatio="xMidYMax slice"
+        style={{ position: "absolute", inset: 0, width: "100%", height: "100%" }}>
+
+        {/* Horizon glow */}
+        <defs>
+          <radialGradient id="hglow" cx="50%" cy="50%" r="50%">
+            <stop offset="0%" stopColor="#c9a84c" stopOpacity="0.25" />
+            <stop offset="100%" stopColor="#c9a84c" stopOpacity="0" />
+          </radialGradient>
+          <linearGradient id="skyGrad" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="#1a0e08" stopOpacity="0" />
+            <stop offset="100%" stopColor="#0a1206" stopOpacity="1" />
+          </linearGradient>
+        </defs>
+        <ellipse cx="400" cy="210" rx="320" ry="60" fill="url(#hglow)" />
+
+        {/* Horizon line */}
+        <line x1="0" y1="210" x2="800" y2="210" stroke="#c9a84c" strokeOpacity="0.25" strokeWidth="1" />
+
+        {/* Perspective vineyard rows */}
+        {[...Array(rows)].map((_, i) => {
+          const t = (i + 1) / rows;
+          const y = vp.y + t * t * 240;
+          const halfW = t * t * 480;
+          const x1 = vp.x - halfW;
+          const x2 = vp.x + halfW;
+          const postCount = Math.max(2, Math.floor(t * 10));
+          return (
+            <g key={i}>
+              <line x1={x1} y1={y} x2={x2} y2={y}
+                stroke="#4a7a30" strokeOpacity={0.2 + t * 0.5} strokeWidth={0.5 + t * 2.5} />
+              {[...Array(postCount + 1)].map((_, j) => {
+                const px = x1 + (j / postCount) * (x2 - x1);
+                const ph = 6 + t * 14;
+                return (
+                  <line key={j} x1={px} y1={y - ph * 0.7} x2={px} y2={y + ph * 0.3}
+                    stroke="#3a6020" strokeOpacity={0.35 + t * 0.3} strokeWidth={0.8} />
+                );
+              })}
+            </g>
+          );
+        })}
+
+        {/* Converging perspective lines */}
+        {[...Array(11)].map((_, i) => {
+          const angle = -55 + i * 11;
+          const rad = (angle * Math.PI) / 180;
+          return (
+            <line key={i}
+              x1={vp.x} y1={vp.y}
+              x2={vp.x + Math.cos(rad) * 700}
+              y2={vp.y + Math.abs(Math.sin(rad)) * 700}
+              stroke="#4a7a30" strokeOpacity="0.08" strokeWidth="1" />
+          );
+        })}
+
+        {/* Ground fill */}
+        <polygon
+          points={`0,450 800,450 800,${vp.y} 0,${vp.y}`}
+          fill="url(#skyGrad)" />
+      </svg>
+
+      {/* Content */}
+      <div style={{ position: "relative", textAlign: "center", padding: "0 24px" }}>
+        <div style={{
+          fontSize: "11px", letterSpacing: "6px", color: gold,
+          fontFamily: "monospace", marginBottom: "18px", opacity: 0.85,
+        }}>
+          JM & NICKY
+        </div>
+        <div style={{
+          fontFamily: "'Playfair Display', serif",
+          fontSize: "clamp(44px, 9vw, 84px)",
+          fontWeight: 900, color: "#f0ebe0", lineHeight: 1,
+          marginBottom: "14px",
+          textShadow: "0 2px 40px rgba(0,0,0,0.9)",
+        }}>
+          The Cellar Book
+        </div>
+        <div style={{
+          fontSize: "11px", color: "#555", fontFamily: "monospace",
+          letterSpacing: "3px", marginBottom: "52px",
+        }}>
+          HUNTER VALLEY · AUSTRALIA
+        </div>
+        <button onClick={handleEnter} style={{
+          background: `linear-gradient(135deg, ${gold}, #a07830)`,
+          border: "none", borderRadius: "50px", cursor: "pointer",
+          fontFamily: "'Playfair Display', serif", fontSize: "17px", fontWeight: 700,
+          color: "#fff", padding: "15px 44px",
+          boxShadow: "0 4px 24px rgba(201,168,76,0.35)",
+          transition: "transform 0.15s, box-shadow 0.15s",
+        }}
+          onMouseEnter={e => { e.currentTarget.style.transform = "translateY(-2px)"; e.currentTarget.style.boxShadow = "0 8px 32px rgba(201,168,76,0.5)"; }}
+          onMouseLeave={e => { e.currentTarget.style.transform = ""; e.currentTarget.style.boxShadow = "0 4px 24px rgba(201,168,76,0.35)"; }}
+        >
+          Enter the Cellar
+        </button>
+      </div>
+
+      {/* Vignette overlay */}
+      <div style={{
+        position: "absolute", inset: 0, pointerEvents: "none",
+        background: "radial-gradient(ellipse at center, transparent 40%, rgba(0,0,0,0.7) 100%)",
+      }} />
+    </div>
+  );
+}
+
+// ─── Main App ─────────────────────────────────────────────────────
+
+export default function App() {
+  const [showSplash, setShowSplash] = useState(true);
+  const [tab, setTab] = useState("tastings");
+  const [tastings, setTastings] = useState([]);
+  const [cellar, setCellar] = useState([]);
+  const [loaded, setLoaded] = useState(false);
+
+  const [showTastingForm, setShowTastingForm] = useState(false);
+  const [editTasting, setEditTasting] = useState(null);
+  const [showCellarForm, setShowCellarForm] = useState(false);
+  const [editCellar, setEditCellar] = useState(null);
+
+  const [tFilter, setTFilter] = useState("All");
+  const [tSort, setTSort] = useState("date");
+  const [tSearch, setTSearch] = useState("");
+  const [cSearch, setCSearch] = useState("");
+
+  // Load from persistent storage on mount
+  useEffect(() => {
+    (async () => {
+      const t = await storageGet("cellarbook-tastings");
+      const c = await storageGet("cellarbook-cellar");
+      setTastings(t && t.length ? t : SEED_TASTINGS);
+      setCellar(c && c.length ? c : SEED_CELLAR);
+      setLoaded(true);
+    })();
+  }, []);
+
+  // Save to persistent storage whenever data changes
+  useEffect(() => {
+    if (loaded) storageSet("cellarbook-tastings", tastings);
+  }, [tastings, loaded]);
+  useEffect(() => {
+    if (loaded) storageSet("cellarbook-cellar", cellar);
+  }, [cellar, loaded]);
+
+  // Tastings actions
+  const saveTasting = (w) => {
+    setTastings(ts => w.id && ts.find(t => t.id === w.id) ? ts.map(t => t.id === w.id ? w : t) : [w, ...ts]);
+    setShowTastingForm(false); setEditTasting(null);
+  };
+  const deleteTasting = (id) => { if (confirm("Remove this tasting?")) setTastings(ts => ts.filter(t => t.id !== id)); };
+
+  // Cellar actions
+  const saveCellar = (w) => {
+    setCellar(cs => w.id && cs.find(c => c.id === w.id) ? cs.map(c => c.id === w.id ? w : c) : [w, ...cs]);
+    setShowCellarForm(false); setEditCellar(null);
+  };
+  const deleteCellar = (id) => { if (confirm("Remove from cellar?")) setCellar(cs => cs.filter(c => c.id !== id)); };
+  const adjustQty = (id, delta) => {
+    setCellar(cs => cs.map(c => c.id === id ? { ...c, quantity: Math.max(0, (c.quantity || 0) + delta) } : c));
+  };
+
+  const filteredTastings = tastings
+    .filter(w => tFilter === "All" || w.style === tFilter)
+    .filter(w => !tSearch || `${w.name} ${w.producer} ${w.region} ${w.grape}`.toLowerCase().includes(tSearch.toLowerCase()))
+    .sort((a, b) => {
+      if (tSort === "date") return new Date(b.date || 0) - new Date(a.date || 0);
+      if (tSort === "avg") {
+        const ba = (b.jmRating ?? 0 + b.nickyRating ?? 0) / 2;
+        const aa = (a.jmRating ?? 0 + a.nickyRating ?? 0) / 2;
+        return ba - aa;
+      }
+      if (tSort === "vintage") return (b.vintage || 0) - (a.vintage || 0);
+      return 0;
+    });
+
+  const filteredCellar = cellar
+    .filter(w => !cSearch || `${w.name} ${w.producer} ${w.region}`.toLowerCase().includes(cSearch.toLowerCase()))
+    .sort((a, b) => a.name.localeCompare(b.name));
+
+  const totalBottles = cellar.reduce((s, w) => s + (w.quantity || 0), 0);
+  const avgJM = tastings.filter(w => w.jmRating).length
+    ? (tastings.filter(w => w.jmRating).reduce((s, w) => s + w.jmRating, 0) / tastings.filter(w => w.jmRating).length).toFixed(1) : "—";
+  const avgNicky = tastings.filter(w => w.nickyRating).length
+    ? (tastings.filter(w => w.nickyRating).reduce((s, w) => s + w.nickyRating, 0) / tastings.filter(w => w.nickyRating).length).toFixed(1) : "—";
+
+  if (!loaded) return (
+    <div style={{ minHeight: "100vh", background: "#111", display: "flex", alignItems: "center", justifyContent: "center" }}>
+      <div style={{ color: "#555", fontFamily: "monospace", fontSize: "13px" }}>Loading your cellar…</div>
+    </div>
+  );
+
+  return (
+    <div style={{ minHeight: "100vh", background: "#111", color: "#f0ebe0" }}>
+      <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700;900&display=swap" rel="stylesheet" />
+      {showSplash && <SplashScreen onEnter={() => setShowSplash(false)} />}
+
+      {/* Header */}
+      <div style={{ background: "#0d0d0d", borderBottom: "1px solid #1a1a1a", padding: "28px 20px 0" }}>
+        <div style={{ maxWidth: "900px", margin: "0 auto" }}>
+          <div style={{ textAlign: "center", marginBottom: "20px" }}>
+            <div style={{ fontSize: "10px", letterSpacing: "4px", color: gold, fontFamily: "monospace", marginBottom: "6px" }}>JM & NICKY</div>
+            <div style={{ fontFamily: "'Playfair Display', serif", fontSize: "clamp(28px, 5vw, 44px)", fontWeight: 900, color: "#f0ebe0", lineHeight: 1 }}>The Cellar Book</div>
+            <div style={{ fontSize: "11px", color: "#444", fontFamily: "monospace", marginTop: "6px" }}>A personal wine journal</div>
+            <div style={{ display: "flex", justifyContent: "center", gap: "28px", marginTop: "18px", flexWrap: "wrap" }}>
+              {[["Tastings", tastings.length, "#f0ebe0"], ["JM Avg", avgJM, gold], ["Nicky Avg", avgNicky, blush], ["Bottles", totalBottles, "#f0ebe0"]].map(([l, v, c]) => (
+                <div key={l} style={{ textAlign: "center" }}>
+                  <div style={{ fontFamily: "'Playfair Display', serif", fontSize: "26px", fontWeight: 700, color: c }}>{v}</div>
+                  <div style={{ fontSize: "9px", color: "#444", fontFamily: "monospace", letterSpacing: "1px", textTransform: "uppercase" }}>{l}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+          <TabBar active={tab} onChange={setTab} />
+        </div>
+      </div>
+
+      {/* Tastings tab */}
+      {tab === "tastings" && (
+        <div style={{ maxWidth: "900px", margin: "0 auto", padding: "20px" }}>
+          <div style={{ display: "flex", gap: "10px", flexWrap: "wrap", marginBottom: "20px", alignItems: "center" }}>
+            <input value={tSearch} onChange={e => setTSearch(e.target.value)} placeholder="Search tastings…"
+              style={{ background: "#1a1a1a", border: "1px solid #2e2e2e", borderRadius: "10px", padding: "9px 14px", color: "#f0ebe0", fontSize: "13px", fontFamily: "monospace", outline: "none", flex: 1, minWidth: "160px" }} />
+            <div style={{ display: "flex", gap: "5px", flexWrap: "wrap" }}>
+              {["All", ...STYLES].map(s => (
+                <button key={s} onClick={() => setTFilter(s)} style={{
+                  background: tFilter === s ? gold : "#1a1a1a", border: `1px solid ${tFilter === s ? gold : "#2e2e2e"}`,
+                  borderRadius: "20px", padding: "5px 12px", color: tFilter === s ? "#111" : "#888",
+                  cursor: "pointer", fontSize: "11px", fontFamily: "monospace", fontWeight: tFilter === s ? 700 : 400,
+                }}>{s}</button>
+              ))}
+            </div>
+            <select value={tSort} onChange={e => setTSort(e.target.value)} style={{ background: "#1a1a1a", border: "1px solid #2e2e2e", borderRadius: "10px", padding: "9px 12px", color: "#888", fontSize: "11px", fontFamily: "monospace", outline: "none" }}>
+              <option value="date">Recent</option>
+              <option value="avg">Rating</option>
+              <option value="vintage">Vintage</option>
+            </select>
+            <Btn variant="gold" onClick={() => { setEditTasting(null); setShowTastingForm(true); }}>+ Log Tasting</Btn>
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))", gap: "16px" }}>
+            {filteredTastings.length === 0 && (
+              <div style={{ gridColumn: "1/-1", textAlign: "center", padding: "60px 20px", color: "#444", fontFamily: "'Playfair Display', serif", fontSize: "18px" }}>
+                No tastings yet. Log your first wine! 🍷
+              </div>
+            )}
+            {filteredTastings.map(w => (
+              <TastingCard key={w.id} wine={w}
+                onEdit={w => { setEditTasting(w); setShowTastingForm(true); }}
+                onDelete={deleteTasting} />
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Cellar tab */}
+      {tab === "cellar" && (
+        <div style={{ maxWidth: "900px", margin: "0 auto", padding: "20px" }}>
+          <div style={{ display: "flex", gap: "10px", marginBottom: "20px", alignItems: "center", flexWrap: "wrap" }}>
+            <input value={cSearch} onChange={e => setCSearch(e.target.value)} placeholder="Search cellar…"
+              style={{ background: "#1a1a1a", border: "1px solid #2e2e2e", borderRadius: "10px", padding: "9px 14px", color: "#f0ebe0", fontSize: "13px", fontFamily: "monospace", outline: "none", flex: 1, minWidth: "160px" }} />
+            <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
+              <div style={{ fontFamily: "'Playfair Display', serif", fontSize: "18px", color: gold }}>{totalBottles} bottles</div>
+              <Btn variant="gold" onClick={() => { setEditCellar(null); setShowCellarForm(true); }}>+ Add Bottle</Btn>
+            </div>
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+            {filteredCellar.length === 0 && (
+              <div style={{ textAlign: "center", padding: "60px 20px", color: "#444", fontFamily: "'Playfair Display', serif", fontSize: "18px" }}>
+                Your cellar is empty. Start adding bottles! 🍾
+              </div>
+            )}
+            {filteredCellar.map(w => (
+              <CellarRow key={w.id} wine={w}
+                onEdit={w => { setEditCellar(w); setShowCellarForm(true); }}
+                onDelete={deleteCellar}
+                onQty={adjustQty} />
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Stats tab */}
+      {tab === "stats" && <Stats tastings={tastings} cellar={cellar} />}
+
+      {/* Sommelier tab */}
+      {tab === "sommelier" && <Sommelier tastings={tastings} />}
+
+      {/* Modals */}
+      {showTastingForm && (
+        <TastingForm wine={editTasting} onSave={saveTasting} onCancel={() => { setShowTastingForm(false); setEditTasting(null); }} />
+      )}
+      {showCellarForm && (
+        <CellarForm wine={editCellar} onSave={saveCellar} onCancel={() => { setShowCellarForm(false); setEditCellar(null); }} />
+      )}
+    </div>
+  );
+}
