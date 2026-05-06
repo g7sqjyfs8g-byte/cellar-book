@@ -108,18 +108,63 @@ const SEED_CELLAR = [
   { id: "c20", name: "Mudgee Cabernet Sauvignon",                                     producer: "Yeates Wines",          vintage: 2018, region: "Mudgee",         country: "Australia", grape: "Cabernet Sauvignon",                              style: "Red", quantity: 3, drinkFrom: null, drinkBy: 2025, price: "$65",  location: "John's Cellar", notes: "",                      dateAdded: "2026-01-01" },
 ];
 
-// Storage helpers using window.storage (persistent shared)
-async function storageGet(key) {
-  try {
-    const r = await window.storage.get(key, true);
-    return r ? JSON.parse(r.value) : null;
-  } catch { return null; }
+// ─── Google Sheets API helpers ───────────────────────────────────────
+
+async function sheetsGet(sheet) {
+  const res = await fetch(`/api/sheets?sheet=${sheet}`);
+  if (!res.ok) throw new Error(`Sheets ${res.status}`);
+  return res.json();
 }
-async function storageSet(key, value) {
-  try {
-    await window.storage.set(key, JSON.stringify(value), true);
-  } catch (e) { console.error("Storage error", e); }
+
+async function sheetsUpsert(sheet, row) {
+  const res = await fetch("/api/sheets", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ action: "upsert", sheet, row }),
+  });
+  if (!res.ok) throw new Error(`Sheets ${res.status}`);
 }
+
+async function sheetsDelete(sheet, id) {
+  const res = await fetch("/api/sheets", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ action: "delete", sheet, id }),
+  });
+  if (!res.ok) throw new Error(`Sheets ${res.status}`);
+}
+
+async function sheetsReplace(sheet, rows) {
+  const res = await fetch("/api/sheets", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ action: "replace", sheet, rows }),
+  });
+  if (!res.ok) throw new Error(`Sheets ${res.status}`);
+}
+
+// Strip base64 label image before writing — too large for a spreadsheet cell
+const toSheetTasting = ({ label, ...row }) => row;
+
+// Coerce types when reading back from sheets (cells may return numbers, booleans, or empty strings)
+const fromSheetTasting = (row) => ({
+  ...row,
+  vintage: row.vintage ? Number(row.vintage) : null,
+  jmRating: row.jmRating !== null && row.jmRating !== "" ? Number(row.jmRating) : null,
+  nickyRating: row.nickyRating !== null && row.nickyRating !== "" ? Number(row.nickyRating) : null,
+  buyAgain: row.buyAgain === true || row.buyAgain === "TRUE" || row.buyAgain === "true" ? true
+    : row.buyAgain === false || row.buyAgain === "FALSE" || row.buyAgain === "false" ? false
+    : null,
+  label: null,
+});
+
+const fromSheetCellar = (row) => ({
+  ...row,
+  vintage: row.vintage ? Number(row.vintage) : null,
+  quantity: row.quantity !== null && row.quantity !== "" ? Number(row.quantity) : 0,
+  drinkFrom: row.drinkFrom ? Number(row.drinkFrom) : null,
+  drinkBy: row.drinkBy ? Number(row.drinkBy) : null,
+});
 
 // ─── Tiny components ────────────────────────────────────────────────
 
@@ -1417,6 +1462,7 @@ export default function App() {
   const [tastings, setTastings] = useState([]);
   const [cellar, setCellar] = useState([]);
   const [loaded, setLoaded] = useState(false);
+  const [syncStatus, setSyncStatus] = useState("loading"); // "loading" | "syncing" | "synced" | "error"
 
   const [showScanModal, setShowScanModal] = useState(false);
   const [showTastingForm, setShowTastingForm] = useState(false);
@@ -1429,40 +1475,66 @@ export default function App() {
   const [tSearch, setTSearch] = useState("");
   const [cSearch, setCSearch] = useState("");
 
-  // Load from persistent storage on mount
+  // Load from Google Sheets on mount
   useEffect(() => {
     (async () => {
-      const t = await storageGet("cellarbook-tastings");
-      const c = await storageGet("cellarbook-cellar");
-      setTastings(t && t.length ? t : SEED_TASTINGS);
-      setCellar(c && c.length ? c : SEED_CELLAR);
+      try {
+        const [t, c] = await Promise.all([sheetsGet("tastings"), sheetsGet("cellar")]);
+        const hasT = Array.isArray(t) && t.length > 0;
+        const hasC = Array.isArray(c) && c.length > 0;
+        setTastings(hasT ? t.map(fromSheetTasting) : SEED_TASTINGS);
+        setCellar(hasC ? c.map(fromSheetCellar) : SEED_CELLAR);
+        // First run: seed the sheets with default data
+        if (!hasT) sheetsReplace("tastings", SEED_TASTINGS.map(toSheetTasting)).catch(console.error);
+        if (!hasC) sheetsReplace("cellar", SEED_CELLAR).catch(console.error);
+        setSyncStatus("synced");
+      } catch (e) {
+        console.error("[load]", e);
+        setTastings(SEED_TASTINGS);
+        setCellar(SEED_CELLAR);
+        setSyncStatus("error");
+      }
       setLoaded(true);
     })();
   }, []);
 
-  // Save to persistent storage whenever data changes
-  useEffect(() => {
-    if (loaded) storageSet("cellarbook-tastings", tastings);
-  }, [tastings, loaded]);
-  useEffect(() => {
-    if (loaded) storageSet("cellarbook-cellar", cellar);
-  }, [cellar, loaded]);
+  const syncWrap = (fn) => {
+    setSyncStatus("syncing");
+    fn().then(() => setSyncStatus("synced")).catch(e => {
+      console.error("[sync]", e);
+      setSyncStatus("error");
+    });
+  };
 
   // Tastings actions
   const saveTasting = (w) => {
     setTastings(ts => w.id && ts.find(t => t.id === w.id) ? ts.map(t => t.id === w.id ? w : t) : [w, ...ts]);
     setShowTastingForm(false); setEditTasting(null);
+    syncWrap(() => sheetsUpsert("tastings", toSheetTasting(w)));
   };
-  const deleteTasting = (id) => { if (confirm("Remove this tasting?")) setTastings(ts => ts.filter(t => t.id !== id)); };
+  const deleteTasting = (id) => {
+    if (!confirm("Remove this tasting?")) return;
+    setTastings(ts => ts.filter(t => t.id !== id));
+    syncWrap(() => sheetsDelete("tastings", id));
+  };
 
   // Cellar actions
   const saveCellar = (w) => {
     setCellar(cs => w.id && cs.find(c => c.id === w.id) ? cs.map(c => c.id === w.id ? w : c) : [w, ...cs]);
     setShowCellarForm(false); setEditCellar(null);
+    syncWrap(() => sheetsUpsert("cellar", w));
   };
-  const deleteCellar = (id) => { if (confirm("Remove from cellar?")) setCellar(cs => cs.filter(c => c.id !== id)); };
+  const deleteCellar = (id) => {
+    if (!confirm("Remove from cellar?")) return;
+    setCellar(cs => cs.filter(c => c.id !== id));
+    syncWrap(() => sheetsDelete("cellar", id));
+  };
   const adjustQty = (id, delta) => {
-    setCellar(cs => cs.map(c => c.id === id ? { ...c, quantity: Math.max(0, (c.quantity || 0) + delta) } : c));
+    const item = cellar.find(c => c.id === id);
+    if (!item) return;
+    const updated = { ...item, quantity: Math.max(0, (item.quantity || 0) + delta) };
+    setCellar(cs => cs.map(c => c.id === id ? updated : c));
+    syncWrap(() => sheetsUpsert("cellar", updated));
   };
 
   // Scan bottle handlers
@@ -1474,6 +1546,7 @@ export default function App() {
   const handleScanToCellar = (entry) => {
     setCellar(cs => [entry, ...cs]);
     setShowScanModal(false);
+    syncWrap(() => sheetsUpsert("cellar", entry));
   };
 
   const filteredTastings = tastings
@@ -1515,6 +1588,11 @@ export default function App() {
       <div style={{ background: "#0d0d0d", borderBottom: "1px solid #1a1a1a", padding: "28px 20px 0" }}>
         <div style={{ maxWidth: "900px", margin: "0 auto", position: "relative" }}>
           <div style={{ textAlign: "center", marginBottom: "20px" }}>
+            <div style={{ position: "absolute", top: "0", right: "0", display: "flex", alignItems: "center", gap: "5px" }}>
+              {syncStatus === "syncing" && <span style={{ fontSize: "10px", color: "#555", fontFamily: "monospace" }}>⟳ syncing…</span>}
+              {syncStatus === "synced"  && <span style={{ fontSize: "10px", color: "#4caf79", fontFamily: "monospace" }}>● synced</span>}
+              {syncStatus === "error"   && <span style={{ fontSize: "10px", color: "#c94c4c", fontFamily: "monospace" }} title="Sync error — check Vercel env vars">✕ sync error</span>}
+            </div>
             <div style={{ fontSize: "10px", letterSpacing: "4px", color: gold, fontFamily: "monospace", marginBottom: "6px" }}>JM & NICKY</div>
             <div style={{ fontFamily: "'Playfair Display', serif", fontSize: "clamp(28px, 5vw, 44px)", fontWeight: 900, color: "#f0ebe0", lineHeight: 1 }}>The Cellar Book</div>
             <div style={{ fontSize: "11px", color: "#444", fontFamily: "monospace", marginTop: "6px" }}>A personal wine journal</div>
