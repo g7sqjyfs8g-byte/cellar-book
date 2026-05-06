@@ -12,8 +12,12 @@ export default async function handler(req, res) {
       const url = `${appsScriptUrl}?secret=${encodeURIComponent(secret)}&sheet=${encodeURIComponent(sheet)}`;
       const upstream = await fetch(url, { redirect: "follow" });
       const text = await upstream.text();
+      res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
       try { return res.status(200).json(JSON.parse(text)); }
-      catch { return res.status(502).json({ error: "Invalid response from sheets backend" }); }
+      catch {
+        console.error("[api/sheets] Non-JSON response:", text.slice(0, 500));
+        return res.status(502).json({ error: "Invalid response from sheets backend", raw: text.slice(0, 200) });
+      }
     }
 
     if (req.method === "POST") {

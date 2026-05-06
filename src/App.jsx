@@ -111,8 +111,11 @@ const SEED_CELLAR = [
 // ─── Google Sheets API helpers ───────────────────────────────────────
 
 async function sheetsGet(sheet) {
-  const res = await fetch(`/api/sheets?sheet=${sheet}`);
-  if (!res.ok) throw new Error(`Sheets ${res.status}`);
+  const res = await fetch(`/api/sheets?sheet=${sheet}`, { cache: "no-store" });
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(`Sheets ${res.status}: ${body.slice(0, 200)}`);
+  }
   return res.json();
 }
 
@@ -1463,6 +1466,7 @@ export default function App() {
   const [cellar, setCellar] = useState([]);
   const [loaded, setLoaded] = useState(false);
   const [syncStatus, setSyncStatus] = useState("loading"); // "loading" | "syncing" | "synced" | "error"
+  const [syncError, setSyncError] = useState(null);
 
   const [showScanModal, setShowScanModal] = useState(false);
   const [showTastingForm, setShowTastingForm] = useState(false);
@@ -1482,17 +1486,20 @@ export default function App() {
         const [t, c] = await Promise.all([sheetsGet("tastings"), sheetsGet("cellar")]);
         const hasT = Array.isArray(t) && t.length > 0;
         const hasC = Array.isArray(c) && c.length > 0;
+        // Google Sheets is the source of truth — always use its data if available
         setTastings(hasT ? t.map(fromSheetTasting) : SEED_TASTINGS);
         setCellar(hasC ? c.map(fromSheetCellar) : SEED_CELLAR);
         // First run: seed the sheets with default data
         if (!hasT) sheetsReplace("tastings", SEED_TASTINGS.map(toSheetTasting)).catch(console.error);
         if (!hasC) sheetsReplace("cellar", SEED_CELLAR).catch(console.error);
         setSyncStatus("synced");
+        setSyncError(null);
       } catch (e) {
-        console.error("[load]", e);
-        setTastings(SEED_TASTINGS);
-        setCellar(SEED_CELLAR);
+        console.error("[load] Failed to fetch from Google Sheets:", e.message);
+        setTastings([]);
+        setCellar([]);
         setSyncStatus("error");
+        setSyncError(e.message);
       }
       setLoaded(true);
     })();
@@ -1500,9 +1507,10 @@ export default function App() {
 
   const syncWrap = (fn) => {
     setSyncStatus("syncing");
-    fn().then(() => setSyncStatus("synced")).catch(e => {
-      console.error("[sync]", e);
+    fn().then(() => { setSyncStatus("synced"); setSyncError(null); }).catch(e => {
+      console.error("[sync]", e.message);
       setSyncStatus("error");
+      setSyncError(e.message);
     });
   };
 
@@ -1591,7 +1599,7 @@ export default function App() {
             <div style={{ position: "absolute", top: "0", right: "0", display: "flex", alignItems: "center", gap: "5px" }}>
               {syncStatus === "syncing" && <span style={{ fontSize: "10px", color: "#555", fontFamily: "monospace" }}>⟳ syncing…</span>}
               {syncStatus === "synced"  && <span style={{ fontSize: "10px", color: "#4caf79", fontFamily: "monospace" }}>● synced</span>}
-              {syncStatus === "error"   && <span style={{ fontSize: "10px", color: "#c94c4c", fontFamily: "monospace" }} title="Sync error — check Vercel env vars">✕ sync error</span>}
+              {syncStatus === "error"   && <span style={{ fontSize: "10px", color: "#c94c4c", fontFamily: "monospace", cursor: "help" }} title={syncError || "Sync error — check Vercel env vars"}>✕ sync error</span>}
             </div>
             <div style={{ fontSize: "10px", letterSpacing: "4px", color: gold, fontFamily: "monospace", marginBottom: "6px" }}>JM & NICKY</div>
             <div style={{ fontFamily: "'Playfair Display', serif", fontSize: "clamp(28px, 5vw, 44px)", fontWeight: 900, color: "#f0ebe0", lineHeight: 1 }}>The Cellar Book</div>
