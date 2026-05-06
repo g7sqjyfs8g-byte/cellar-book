@@ -1,10 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 
 // ─── Anthropic API helper ─────────────────────────────────────────
-const getApiKey = () =>
-  import.meta.env.VITE_ANTHROPIC_API_KEY ||
-  localStorage.getItem("cellarbook-api-key") ||
-  "";
 
 // Extracts base64 data and the real media type from a data URL.
 // Falls back to image/jpeg for unsupported types (HEIC etc).
@@ -17,37 +13,28 @@ function parseImageDataUrl(dataUrl) {
 }
 
 async function callClaude({ messages, system, maxTokens = 1024 }) {
-  const key = getApiKey();
-  console.log("[callClaude] API key present:", !!key, key ? `(${key.slice(0, 10)}…)` : "(none)");
-  if (!key) throw new Error("NO_API_KEY");
-  const body = {
-    model: "claude-sonnet-4-6",
-    max_tokens: maxTokens,
-    ...(system ? { system } : {}),
-    messages,
-  };
-  console.log("[callClaude] Request model:", body.model, "| messages:", messages.length);
   let res;
   try {
-    res = await fetch("https://api.anthropic.com/v1/messages", {
+    res = await fetch("/api/claude", {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-key": key,
-        "anthropic-version": "2023-06-01",
-      },
-      body: JSON.stringify(body),
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: "claude-sonnet-4-6",
+        max_tokens: maxTokens,
+        ...(system ? { system } : {}),
+        messages,
+      }),
     });
   } catch (networkErr) {
     console.error("[callClaude] Network error:", networkErr);
     throw new Error(`Network error: ${networkErr.message}`);
   }
   const responseText = await res.text();
-  console.log("[callClaude] Status:", res.status, "| Body:", responseText.slice(0, 500));
   if (!res.ok) {
     let err = {};
     try { err = JSON.parse(responseText); } catch {}
-    throw new Error(err?.error?.message || `API error ${res.status}: ${responseText.slice(0, 200)}`);
+    console.error("[callClaude] API error:", res.status, responseText.slice(0, 500));
+    throw new Error(err?.error?.message || `API error ${res.status}`);
   }
   const data = JSON.parse(responseText);
   return data.content?.map(c => c.text || "").join("") || "";
@@ -367,9 +354,7 @@ function TastingForm({ wine, onSave, onCancel }) {
       }));
     } catch (e) {
       console.error("[TastingForm] Label read error:", e.message);
-      alert(e.message === "NO_API_KEY"
-        ? "Add your Anthropic API key in Settings (⚙️) first."
-        : `Couldn't read the label: ${e.message}`);
+      alert(`Couldn't read the label: ${e.message}`);
     }
     setAiLoading(false);
   };
@@ -493,9 +478,7 @@ function CellarForm({ wine, onSave, onCancel }) {
       }));
     } catch (e) {
       console.error("[CellarForm] Label read error:", e.message);
-      alert(e.message === "NO_API_KEY"
-        ? "Add your Anthropic API key in Settings (⚙️) first."
-        : `Couldn't read the label: ${e.message}`);
+      alert(`Couldn't read the label: ${e.message}`);
     }
     setAiLoading(false);
   };
@@ -752,7 +735,7 @@ function Sommelier({ tastings }) {
       const reply = await claudeChat(history, system("ask"));
       push("assistant", reply, { mode: "ask" });
     } catch (e) {
-      push("assistant", e.message === "NO_API_KEY" ? "No API key set — tap ⚙️ in the header to add your Anthropic API key." : "Sorry, I couldn't reach the sommelier. Please try again.", { mode: "ask", isError: true });
+      push("assistant", "Sorry, I couldn't reach the sommelier. Please try again.", { mode: "ask", isError: true });
     }
     setLoading(false);
   };
@@ -767,7 +750,7 @@ function Sommelier({ tastings }) {
       const reply = await claudeChat([{ role: "user", content: text }], system("meal"));
       push("assistant", reply, { mode: "meal" });
     } catch (e) {
-      push("assistant", e.message === "NO_API_KEY" ? "No API key set — tap ⚙️ in the header to add your Anthropic API key." : "Sorry, I couldn't reach the sommelier. Please try again.", { mode: "meal", isError: true });
+      push("assistant", "Sorry, I couldn't reach the sommelier. Please try again.", { mode: "meal", isError: true });
     }
     setLoading(false);
   };
@@ -791,7 +774,7 @@ function Sommelier({ tastings }) {
       const reply = await claudeChat([{ role: "user", content }], system("restaurant"));
       push("assistant", reply, { mode: "restaurant" });
     } catch (e) {
-      push("assistant", e.message === "NO_API_KEY" ? "No API key set — tap ⚙️ in the header to add your Anthropic API key." : "Sorry, I couldn't reach the sommelier. Please try again.", { mode: "restaurant", isError: true });
+      push("assistant", "Sorry, I couldn't reach the sommelier. Please try again.", { mode: "restaurant", isError: true });
     }
     setLoading(false);
   };
@@ -1001,50 +984,6 @@ function Sommelier({ tastings }) {
   );
 }
 
-// ─── Settings Modal ───────────────────────────────────────────────
-
-function SettingsModal({ onClose }) {
-  const [key, setKey] = useState(localStorage.getItem("cellarbook-api-key") || "");
-  const [saved, setSaved] = useState(false);
-
-  const handleSave = () => {
-    localStorage.setItem("cellarbook-api-key", key.trim());
-    setSaved(true);
-    setTimeout(onClose, 800);
-  };
-
-  return (
-    <Modal title="⚙️ Settings" onClose={onClose}>
-      <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
-        <div>
-          <div style={{ fontSize: "10px", color: "#666", fontFamily: "monospace", letterSpacing: "1px", marginBottom: "6px", textTransform: "uppercase" }}>Anthropic API Key</div>
-          <div style={{ fontSize: "11px", color: "#555", fontFamily: "monospace", marginBottom: "10px", lineHeight: 1.6 }}>
-            Required for the Sommelier, bottle scanner, and label auto-fill. Get a key at{" "}
-            <span style={{ color: gold }}>console.anthropic.com</span>.
-          </div>
-          <input
-            type="password"
-            value={key}
-            onChange={e => { setKey(e.target.value); setSaved(false); }}
-            placeholder="sk-ant-…"
-            style={{
-              background: "#181818", border: "1px solid #2e2e2e", borderRadius: "8px",
-              padding: "10px 12px", color: "#f0ebe0", fontSize: "13px",
-              fontFamily: "monospace", width: "100%", boxSizing: "border-box", outline: "none",
-            }}
-          />
-        </div>
-        <div style={{ display: "flex", gap: "10px", justifyContent: "flex-end" }}>
-          <Btn onClick={onClose}>Cancel</Btn>
-          <Btn variant="gold" onClick={handleSave} disabled={!key.trim()}>
-            {saved ? "✓ Saved" : "Save"}
-          </Btn>
-        </div>
-      </div>
-    </Modal>
-  );
-}
-
 // ─── Scan Bottle Modal ────────────────────────────────────────────
 
 function ScanBottleModal({ onAddToTasting, onAddToCellar, onClose }) {
@@ -1069,9 +1008,7 @@ function ScanBottleModal({ onAddToTasting, onAddToCellar, onClose }) {
       setParsed(JSON.parse(raw.replace(/```json|```/g, "").trim()));
     } catch (e) {
       console.error("[ScanBottleModal] Label read error:", e.message);
-      setError(e.message === "NO_API_KEY"
-        ? "Add your Anthropic API key in Settings (⚙️) first."
-        : `Couldn't read the label: ${e.message}`);
+      setError(`Couldn't read the label: ${e.message}`);
     }
     setStep("review");
   };
@@ -1418,7 +1355,6 @@ export default function App() {
   const [cellar, setCellar] = useState([]);
   const [loaded, setLoaded] = useState(false);
 
-  const [showSettings, setShowSettings] = useState(false);
   const [showScanModal, setShowScanModal] = useState(false);
   const [showTastingForm, setShowTastingForm] = useState(false);
   const [editTasting, setEditTasting] = useState(null);
@@ -1519,15 +1455,6 @@ export default function App() {
             <div style={{ fontSize: "10px", letterSpacing: "4px", color: gold, fontFamily: "monospace", marginBottom: "6px" }}>JM & NICKY</div>
             <div style={{ fontFamily: "'Playfair Display', serif", fontSize: "clamp(28px, 5vw, 44px)", fontWeight: 900, color: "#f0ebe0", lineHeight: 1 }}>The Cellar Book</div>
             <div style={{ fontSize: "11px", color: "#444", fontFamily: "monospace", marginTop: "6px" }}>A personal wine journal</div>
-            <button onClick={() => setShowSettings(true)} title="Settings" style={{
-              position: "absolute", top: "20px", right: "20px",
-              background: "none", border: "1px solid #2a2a2a", borderRadius: "8px",
-              color: "#555", cursor: "pointer", fontSize: "16px", padding: "6px 10px",
-              transition: "color 0.15s, border-color 0.15s",
-            }}
-              onMouseEnter={e => { e.currentTarget.style.color = gold; e.currentTarget.style.borderColor = gold; }}
-              onMouseLeave={e => { e.currentTarget.style.color = "#555"; e.currentTarget.style.borderColor = "#2a2a2a"; }}
-            >⚙️</button>
             <div style={{ display: "flex", justifyContent: "center", gap: "28px", marginTop: "18px", flexWrap: "wrap" }}>
               {[["Tastings", tastings.length, "#f0ebe0"], ["JM Avg", avgJM, gold], ["Nicky Avg", avgNicky, blush], ["Bottles", totalBottles, "#f0ebe0"]].map(([l, v, c]) => (
                 <div key={l} style={{ textAlign: "center" }}>
@@ -1631,7 +1558,6 @@ export default function App() {
       )}
 
       {/* Modals */}
-      {showSettings && <SettingsModal onClose={() => setShowSettings(false)} />}
       {showScanModal && (
         <ScanBottleModal
           onAddToTasting={handleScanToTasting}
