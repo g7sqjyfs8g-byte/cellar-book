@@ -1479,14 +1479,14 @@ export default function App() {
   useEffect(() => {
     (async () => {
       try {
-        const [t, c] = await Promise.all([sheetsGet("Tastings"), sheetsGet("Cellar")]);
+        const [t, c] = await Promise.all([sheetsGet("tastings"), sheetsGet("cellar")]);
         const hasT = Array.isArray(t) && t.length > 0;
         const hasC = Array.isArray(c) && c.length > 0;
         setTastings(hasT ? t.map(fromSheetTasting) : SEED_TASTINGS);
         setCellar(hasC ? c.map(fromSheetCellar) : SEED_CELLAR);
         // First run: seed the sheets with default data
-        if (!hasT) sheetsReplace("Tastings", SEED_TASTINGS.map(toSheetTasting)).catch(console.error);
-        if (!hasC) sheetsReplace("Cellar", SEED_CELLAR).catch(console.error);
+        if (!hasT) sheetsReplace("tastings", SEED_TASTINGS.map(toSheetTasting)).catch(console.error);
+        if (!hasC) sheetsReplace("cellar", SEED_CELLAR).catch(console.error);
         setSyncStatus("synced");
       } catch (e) {
         console.error("[load]", e);
@@ -1510,31 +1510,31 @@ export default function App() {
   const saveTasting = (w) => {
     setTastings(ts => w.id && ts.find(t => t.id === w.id) ? ts.map(t => t.id === w.id ? w : t) : [w, ...ts]);
     setShowTastingForm(false); setEditTasting(null);
-    syncWrap(() => sheetsUpsert("Tastings", toSheetTasting(w)));
+    syncWrap(() => sheetsUpsert("tastings", toSheetTasting(w)));
   };
   const deleteTasting = (id) => {
     if (!confirm("Remove this tasting?")) return;
     setTastings(ts => ts.filter(t => t.id !== id));
-    syncWrap(() => sheetsDelete("Tastings", id));
+    syncWrap(() => sheetsDelete("tastings", id));
   };
 
   // Cellar actions
   const saveCellar = (w) => {
     setCellar(cs => w.id && cs.find(c => c.id === w.id) ? cs.map(c => c.id === w.id ? w : c) : [w, ...cs]);
     setShowCellarForm(false); setEditCellar(null);
-    syncWrap(() => sheetsUpsert("Cellar", w));
+    syncWrap(() => sheetsUpsert("cellar", w));
   };
   const deleteCellar = (id) => {
     if (!confirm("Remove from cellar?")) return;
     setCellar(cs => cs.filter(c => c.id !== id));
-    syncWrap(() => sheetsDelete("Cellar", id));
+    syncWrap(() => sheetsDelete("cellar", id));
   };
   const adjustQty = (id, delta) => {
     const item = cellar.find(c => c.id === id);
     if (!item) return;
     const updated = { ...item, quantity: Math.max(0, (item.quantity || 0) + delta) };
     setCellar(cs => cs.map(c => c.id === id ? updated : c));
-    syncWrap(() => sheetsUpsert("Cellar", updated));
+    syncWrap(() => sheetsUpsert("cellar", updated));
   };
 
   // Scan bottle handlers
@@ -1546,7 +1546,7 @@ export default function App() {
   const handleScanToCellar = (entry) => {
     setCellar(cs => [entry, ...cs]);
     setShowScanModal(false);
-    syncWrap(() => sheetsUpsert("Cellar", entry));
+    syncWrap(() => sheetsUpsert("cellar", entry));
   };
 
   const filteredTastings = tastings
