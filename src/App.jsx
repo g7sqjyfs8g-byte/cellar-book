@@ -1544,10 +1544,10 @@ export default function App() {
           onClick={() => setShowScanModal(true)}
           title="Scan a bottle"
           style={{
-            position: "fixed", bottom: "28px", right: "28px", zIndex: 500,
-            width: "60px", height: "60px", borderRadius: "50%",
+            position: "fixed", bottom: "calc(24px + env(safe-area-inset-bottom, 0px))", right: "20px", zIndex: 500,
+            width: "56px", height: "56px", borderRadius: "50%",
             background: `linear-gradient(135deg, ${gold}, #a07830)`,
-            border: "none", cursor: "pointer", fontSize: "24px",
+            border: "none", cursor: "pointer", fontSize: "22px",
             boxShadow: "0 4px 20px rgba(201,168,76,0.45)",
             transition: "transform 0.15s, box-shadow 0.15s",
             display: "flex", alignItems: "center", justifyContent: "center",
