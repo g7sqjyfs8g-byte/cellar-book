@@ -6,6 +6,16 @@ const getApiKey = () =>
   localStorage.getItem("cellarbook-api-key") ||
   "";
 
+// Extracts base64 data and the real media type from a data URL.
+// Falls back to image/jpeg for unsupported types (HEIC etc).
+const SUPPORTED_TYPES = ["image/jpeg", "image/png", "image/gif", "image/webp"];
+function parseImageDataUrl(dataUrl) {
+  const match = dataUrl.match(/^data:([^;]+);base64,(.+)$/);
+  if (!match) return { mediaType: "image/jpeg", data: dataUrl };
+  const mediaType = SUPPORTED_TYPES.includes(match[1]) ? match[1] : "image/jpeg";
+  return { mediaType, data: match[2] };
+}
+
 async function callClaude({ messages, system, maxTokens = 1024 }) {
   const key = getApiKey();
   if (!key) throw new Error("NO_API_KEY");
@@ -15,7 +25,6 @@ async function callClaude({ messages, system, maxTokens = 1024 }) {
       "Content-Type": "application/json",
       "x-api-key": key,
       "anthropic-version": "2023-06-01",
-      "anthropic-dangerous-request-source": "user-published-app",
     },
     body: JSON.stringify({
       model: "claude-sonnet-4-20250514",
@@ -330,11 +339,11 @@ function TastingForm({ wine, onSave, onCancel }) {
     if (!form.label) return;
     setAiLoading(true);
     try {
-      const imgData = form.label.includes(",") ? form.label.split(",")[1] : form.label;
+      const { mediaType, data: imgData } = parseImageDataUrl(form.label);
       const raw = await callClaude({
         maxTokens: 500,
         messages: [{ role: "user", content: [
-          { type: "image", source: { type: "base64", media_type: "image/jpeg", data: imgData } },
+          { type: "image", source: { type: "base64", media_type: mediaType, data: imgData } },
           { type: "text", text: `Read this wine label. Return ONLY valid JSON, no markdown:\n{"name":"wine name only","producer":"winery/producer","vintage":2024,"region":"region","country":"country","grape":"grape or blend","style":"Red|White|Rosé|Sparkling|Dessert|Orange"}\nUse null for unknown fields.` }
         ]}],
       });
@@ -453,11 +462,11 @@ function CellarForm({ wine, onSave, onCancel }) {
     if (!labelImg) return;
     setAiLoading(true);
     try {
-      const imgData = labelImg.includes(",") ? labelImg.split(",")[1] : labelImg;
+      const { mediaType, data: imgData } = parseImageDataUrl(labelImg);
       const raw = await callClaude({
         maxTokens: 500,
         messages: [{ role: "user", content: [
-          { type: "image", source: { type: "base64", media_type: "image/jpeg", data: imgData } },
+          { type: "image", source: { type: "base64", media_type: mediaType, data: imgData } },
           { type: "text", text: `Read this wine label. Return ONLY valid JSON, no markdown:\n{"name":"wine name only","producer":"winery/producer","vintage":2024,"region":"region","country":"country","grape":"grape or blend","style":"Red|White|Rosé|Sparkling|Dessert|Orange"}\nUse null for unknown fields.` }
         ]}],
       });
@@ -753,8 +762,8 @@ function Sommelier({ tastings }) {
     try {
       const content = [];
       if (wineListImg) {
-        const imgData = wineListImg.includes(",") ? wineListImg.split(",")[1] : wineListImg;
-        content.push({ type: "image", source: { type: "base64", media_type: "image/jpeg", data: imgData } });
+        const { mediaType, data: imgData } = parseImageDataUrl(wineListImg);
+        content.push({ type: "image", source: { type: "base64", media_type: mediaType, data: imgData } });
       }
       const parts = [];
       if (restaurant) parts.push(`Restaurant: ${restaurant}`);
@@ -1031,11 +1040,11 @@ function ScanBottleModal({ onAddToTasting, onAddToCellar, onClose }) {
   const readLabel = async (dataUrl) => {
     setStep("reading");
     try {
-      const imgData = dataUrl.includes(",") ? dataUrl.split(",")[1] : dataUrl;
+      const { mediaType, data: imgData } = parseImageDataUrl(dataUrl);
       const raw = await callClaude({
         maxTokens: 600,
         messages: [{ role: "user", content: [
-          { type: "image", source: { type: "base64", media_type: "image/jpeg", data: imgData } },
+          { type: "image", source: { type: "base64", media_type: mediaType, data: imgData } },
           { type: "text", text: `Analyse this wine bottle or label carefully. Return ONLY valid JSON, no markdown:\n{"name":"wine name only (not producer)","producer":"winery or producer name","vintage":2020,"region":"wine region","country":"country of origin","grape":"grape variety or blend","style":"Red|White|Rosé|Sparkling|Dessert|Orange","price":null}\nBe precise. Use null for any field you cannot determine.` }
         ]}],
       });
