@@ -1,9 +1,9 @@
 export default async function handler(req, res) {
-  const appsScriptUrl = process.env.GOOGLE_SHEETS_URL;
-  const secret = process.env.GOOGLE_SHEETS_SECRET || "";
+  const appsScriptUrl = process.env.GOOGLE_SHEET_URL;
+  const secret = process.env.SHEETS_SECRET || "";
 
   if (!appsScriptUrl) {
-    return res.status(500).json({ error: "GOOGLE_SHEETS_URL not configured" });
+    return res.status(500).json({ error: "GOOGLE_SHEET_URL not configured" });
   }
 
   try {
