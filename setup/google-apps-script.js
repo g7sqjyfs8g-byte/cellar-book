@@ -50,8 +50,7 @@ function checkSecret(incoming) {
 }
 
 function getSheet(name) {
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
-  return name === "cellar" ? ss.getSheetByName("Cellar") : ss.getSheetByName("Tastings");
+  return SpreadsheetApp.getActiveSpreadsheet().getSheetByName(name);
 }
 
 function respond(data) {

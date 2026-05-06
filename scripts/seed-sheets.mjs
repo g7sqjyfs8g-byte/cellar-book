@@ -76,11 +76,11 @@ console.log("Syncing to Google Sheets…\n");
 
 try {
   process.stdout.write("  Tastings… ");
-  await replace("tastings", TASTINGS);
+  await replace("Tastings", TASTINGS);
   console.log(`✓  ${TASTINGS.length} rows written`);
 
   process.stdout.write("  Cellar…   ");
-  await replace("cellar", CELLAR);
+  await replace("Cellar", CELLAR);
   console.log(`✓  ${CELLAR.length} rows written`);
 
   console.log("\nDone. Open your Google Sheet to verify.");
