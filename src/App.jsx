@@ -680,8 +680,10 @@ function Sommelier({ tastings }) {
   const [restaurant, setRestaurant] = useState("");
   const [wineListImg, setWineListImg] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [bottleImg, setBottleImg] = useState(null);
   const chatRef = useRef();
   const fileRef = useRef();
+  const bottleFileRef = useRef();
 
   useEffect(() => {
     if (chatRef.current) chatRef.current.scrollTop = chatRef.current.scrollHeight;
@@ -779,6 +781,30 @@ function Sommelier({ tastings }) {
     setLoading(false);
   };
 
+  const handleBottleAnalysis = async () => {
+    if (!bottleImg || loading) return;
+    push("user", "📷 Bottle photo submitted", { mode: "bottle", hasBottleImg: true, bottleImg });
+    setLoading(true);
+    try {
+      const { mediaType, data: imgData } = parseImageDataUrl(bottleImg);
+      const prefs = preferenceProfile();
+      const sys = `You are an expert sommelier. Analyse the wine in the photo and return a structured response with exactly these three sections, using ## headings:\n\n## Tasting Notes\nDescribe the likely flavour profile, aroma, and palate — colour, nose, palate, finish. Be specific to this wine's grape variety, region, and vintage if visible.\n\n## Food Pairings\nRecommend 4–6 specific dishes that pair well with this wine. For each, briefly explain why it works. Use bullet points.\n\n## Serving Suggestions\nCover ideal serving temperature, whether to decant and for how long, and best glass style.\n\nBe specific and confident. Bold the wine name and producer where you reference them.${prefs ? `\n\nFor context, JM and Nicky's wine preferences:\n${prefs}` : ""}`;
+      const reply = await callClaude({
+        messages: [{ role: "user", content: [
+          { type: "image", source: { type: "base64", media_type: mediaType, data: imgData } },
+          { type: "text", text: "Please analyse this wine and provide tasting notes, food pairing recommendations, and serving suggestions." },
+        ]}],
+        system: sys,
+        maxTokens: 1200,
+      });
+      push("assistant", reply, { mode: "bottle" });
+    } catch (e) {
+      push("assistant", "Sorry, I couldn't analyse that bottle. Please try again.", { mode: "bottle", isError: true });
+    }
+    setLoading(false);
+    setBottleImg(null);
+  };
+
   const renderText = (text) =>
     text.split("\n").map((line, i) => {
       const isBullet = /^[-•*]\s/.test(line);
@@ -814,6 +840,7 @@ function Sommelier({ tastings }) {
     ask:        { label: "💬 Ask Anything",    placeholder: "Ask about regions, grapes, vintages, serving temps…",   empty: ["Ask me anything about wine", "Regions, grapes, vintages, serving temperatures…"] },
     meal:       { label: "🍽 Meal Pairing",    placeholder: "",                                                        empty: ["Tell me what you're cooking", "I'll suggest wines matched to your preferences"] },
     restaurant: { label: "🍾 Restaurant List", placeholder: "",                                                        empty: ["Share the wine list and your dish", "Upload a photo of the wine list for the best results"] },
+    bottle:     { label: "📷 Analyse Label",   placeholder: "",                                                        empty: ["Photograph a bottle or label", "I'll identify the wine and give you tasting notes, food pairings, and serving tips"] },
   };
 
   return (
@@ -886,6 +913,7 @@ function Sommelier({ tastings }) {
                 ? renderText(msg.text)
                 : <div style={{ fontSize: "13px", color: "#e0d8c8", fontFamily: "monospace", lineHeight: 1.5 }}>
                     {msg.hasImage && <span style={{ fontSize: "11px", color: "#666", display: "block", marginBottom: "4px" }}>📷 Wine list attached</span>}
+                    {msg.hasBottleImg && <img src={msg.bottleImg} alt="Bottle" style={{ display: "block", maxHeight: "140px", maxWidth: "100%", borderRadius: "8px", objectFit: "contain", marginBottom: "6px" }} />}
                     {msg.text}
                   </div>
               }
@@ -971,6 +999,41 @@ function Sommelier({ tastings }) {
           <div style={{ display: "flex", justifyContent: "flex-end" }}>
             <Btn variant="gold" onClick={handleRestaurantPairing} disabled={loading || (!dish.trim() && !wineListImg)}>Get Pairing</Btn>
           </div>
+        </div>
+      )}
+
+      {/* ── Bottle Analysis mode ── */}
+      {mode === "bottle" && (
+        <div style={{ background: "#161616", border: "1px solid #222", borderRadius: "16px", padding: "18px", display: "flex", flexDirection: "column", gap: "14px" }}>
+          <div style={{ fontSize: "12px", color: "#888", fontFamily: "monospace", lineHeight: 1.6 }}>
+            Take a photo of a wine bottle or label — I'll identify the wine and return tasting notes, food pairings, and serving suggestions.
+          </div>
+          <div>
+            <div style={{ fontSize: "10px", color: "#666", fontFamily: "monospace", letterSpacing: "1px", marginBottom: "8px", textTransform: "uppercase" }}>Bottle or Label Photo</div>
+            <div style={{ display: "flex", gap: "10px", alignItems: "center", flexWrap: "wrap" }}>
+              <Btn onClick={() => bottleFileRef.current.click()} style={{ background: "#242424", border: "1px dashed #444", color: "#aaa" }}>📷 Take / Upload Photo</Btn>
+              {bottleImg && (
+                <button onClick={() => setBottleImg(null)} style={{ background: "none", border: "none", color: "#555", cursor: "pointer", fontSize: "11px", fontFamily: "monospace" }}>Remove</button>
+              )}
+            </div>
+            <input ref={bottleFileRef} type="file" accept="image/*" capture="environment"
+              onChange={e => { const f = e.target.files[0]; if (!f) return; const r = new FileReader(); r.onload = () => setBottleImg(r.result); r.readAsDataURL(f); e.target.value = ""; }}
+              style={{ display: "none" }} />
+          </div>
+          {bottleImg && (
+            <div style={{ display: "flex", gap: "14px", alignItems: "flex-start", flexWrap: "wrap" }}>
+              <img src={bottleImg} alt="Bottle" style={{ maxHeight: "200px", maxWidth: "160px", borderRadius: "10px", objectFit: "contain", border: "1px solid #2a2a2a", flexShrink: 0 }} />
+              <div style={{ flex: 1, display: "flex", flexDirection: "column", justifyContent: "flex-end", minWidth: "120px" }}>
+                <div style={{ fontSize: "11px", color: "#4caf79", fontFamily: "monospace", marginBottom: "12px" }}>✓ Photo ready</div>
+                <Btn variant="gold" onClick={handleBottleAnalysis} disabled={loading}>Analyse This Wine</Btn>
+              </div>
+            </div>
+          )}
+          {!bottleImg && (
+            <div style={{ display: "flex", justifyContent: "flex-end" }}>
+              <Btn variant="gold" onClick={handleBottleAnalysis} disabled={true}>Analyse This Wine</Btn>
+            </div>
+          )}
         </div>
       )}
 
