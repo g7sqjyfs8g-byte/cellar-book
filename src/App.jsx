@@ -1083,8 +1083,7 @@ function Sommelier({ tastings }) {
                 <button onClick={() => setWineListImg(null)} style={{ background: "none", border: "none", color: "#555", cursor: "pointer", fontSize: "11px", fontFamily: "monospace" }}>Remove</button>
               </>}
             </div>
-            <input ref={fileRef} type="file" accept="image/*" capture="environment"
-              onChange={e => { const f = e.target.files[0]; if (!f) return; if (isHeic(f)) { alert(HEIC_MSG); e.target.value = ""; return; } const r = new FileReader(); r.onload = async () => { try { setWineListImg(await compressImage(r.result)); } catch (err) { alert(err.message); } }; r.readAsDataURL(f); }}
+            <input ref={fileRef} type="file" accept="image/*"              onChange={e => { const f = e.target.files[0]; if (!f) return; if (isHeic(f)) { alert(HEIC_MSG); e.target.value = ""; return; } const r = new FileReader(); r.onload = async () => { try { setWineListImg(await compressImage(r.result)); } catch (err) { alert(err.message); } }; r.readAsDataURL(f); }}
               style={{ display: "none" }} />
             {wineListImg && <img src={wineListImg} alt="Wine list" style={{ marginTop: "10px", maxHeight: "160px", borderRadius: "8px", objectFit: "contain", border: "1px solid #2a2a2a" }} />}
           </div>
@@ -1108,8 +1107,7 @@ function Sommelier({ tastings }) {
                 <button onClick={() => setBottleImg(null)} style={{ background: "none", border: "none", color: "#555", cursor: "pointer", fontSize: "11px", fontFamily: "monospace" }}>Remove</button>
               )}
             </div>
-            <input ref={bottleFileRef} type="file" accept="image/*" capture="environment"
-              onChange={e => { const f = e.target.files[0]; if (!f) return; if (isHeic(f)) { alert(HEIC_MSG); e.target.value = ""; return; } const r = new FileReader(); r.onload = async () => { try { setBottleImg(await compressImage(r.result)); } catch (err) { alert(err.message); } }; r.readAsDataURL(f); e.target.value = ""; }}
+            <input ref={bottleFileRef} type="file" accept="image/*"              onChange={e => { const f = e.target.files[0]; if (!f) return; if (isHeic(f)) { alert(HEIC_MSG); e.target.value = ""; return; } const r = new FileReader(); r.onload = async () => { try { setBottleImg(await compressImage(r.result)); } catch (err) { alert(err.message); } }; r.readAsDataURL(f); e.target.value = ""; }}
               style={{ display: "none" }} />
           </div>
           {bottleImg && (
@@ -1241,7 +1239,7 @@ function ScanBottleModal({ onAddToTasting, onAddToCellar, onClose }) {
               Tap to take a photo<br />or upload from your library
             </div>
           </div>
-          <input ref={fileRef} type="file" accept="image/*" capture="environment" onChange={handleFile} style={{ display: "none" }} />
+          <input ref={fileRef} type="file" accept="image/*" onChange={handleFile} style={{ display: "none" }} />
           <Btn variant="gold" onClick={() => fileRef.current.click()} style={{ padding: "13px 36px", fontSize: "15px" }}>
             Take / Upload Photo
           </Btn>
