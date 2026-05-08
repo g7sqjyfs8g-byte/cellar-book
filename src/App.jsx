@@ -297,6 +297,118 @@ function Btn({ children, variant = "ghost", onClick, disabled, style = {} }) {
   return <button onClick={onClick} disabled={disabled} style={{ ...base, ...variants[variant] }}>{children}</button>;
 }
 
+// ─── Google Places Autocomplete ───────────────────────────────────
+
+let _mapsPromise = null;
+function loadGoogleMaps() {
+  if (_mapsPromise) return _mapsPromise;
+  _mapsPromise = new Promise((resolve, reject) => {
+    if (window.google?.maps?.places) { resolve(); return; }
+    const key = import.meta.env.VITE_GOOGLE_PLACES_KEY;
+    if (!key) { reject(new Error("VITE_GOOGLE_PLACES_KEY not set")); return; }
+    window.__gmCb = resolve;
+    const s = document.createElement("script");
+    s.src = `https://maps.googleapis.com/maps/api/js?key=${key}&libraries=places&callback=__gmCb`;
+    s.async = true;
+    s.onerror = () => reject(new Error("Failed to load Google Maps"));
+    document.head.appendChild(s);
+  });
+  return _mapsPromise;
+}
+
+function PlacesAutocomplete({ label, value, onChange }) {
+  const [suggestions, setSuggestions] = useState([]);
+  const [open, setOpen] = useState(false);
+  const debounceRef = useRef(null);
+  const serviceRef = useRef(null);
+  const wrapRef = useRef(null);
+
+  useEffect(() => {
+    loadGoogleMaps()
+      .then(() => { serviceRef.current = new window.google.maps.places.AutocompleteService(); })
+      .catch(e => console.warn("[Places]", e.message));
+  }, []);
+
+  useEffect(() => {
+    const close = (e) => { if (wrapRef.current && !wrapRef.current.contains(e.target)) setOpen(false); };
+    document.addEventListener("mousedown", close);
+    return () => document.removeEventListener("mousedown", close);
+  }, []);
+
+  const handleChange = (e) => {
+    const val = e.target.value;
+    onChange(val);
+    clearTimeout(debounceRef.current);
+    if (!val.trim() || !serviceRef.current) { setSuggestions([]); setOpen(false); return; }
+    debounceRef.current = setTimeout(() => {
+      serviceRef.current.getPlacePredictions(
+        { input: val, types: ["establishment"] },
+        (preds, status) => {
+          if (status === window.google.maps.places.PlacesServiceStatus.OK && preds?.length) {
+            setSuggestions(preds.slice(0, 5));
+            setOpen(true);
+          } else {
+            setSuggestions([]);
+            setOpen(false);
+          }
+        }
+      );
+    }, 300);
+  };
+
+  const handleSelect = (pred) => {
+    onChange(pred.structured_formatting?.main_text || pred.description);
+    setSuggestions([]);
+    setOpen(false);
+  };
+
+  return (
+    <div ref={wrapRef} style={{ position: "relative" }}>
+      {label && <div style={{ fontSize: "10px", color: "#666", fontFamily: "monospace", letterSpacing: "1px", marginBottom: "5px", textTransform: "uppercase" }}>{label}</div>}
+      <input
+        value={value}
+        onChange={handleChange}
+        onFocus={() => suggestions.length > 0 && setOpen(true)}
+        placeholder="Start typing a restaurant or venue…"
+        style={{
+          background: "#181818", border: "1px solid #2e2e2e", borderRadius: "8px",
+          padding: "9px 12px", color: "#f0ebe0", fontSize: "13px", fontFamily: "monospace",
+          width: "100%", boxSizing: "border-box", outline: "none",
+        }}
+      />
+      {open && suggestions.length > 0 && (
+        <div style={{
+          position: "absolute", top: "calc(100% + 4px)", left: 0, right: 0, zIndex: 2000,
+          background: "#1c1c1c", border: "1px solid #2e2e2e", borderRadius: "8px",
+          overflow: "hidden", boxShadow: "0 8px 24px rgba(0,0,0,0.6)",
+        }}>
+          {suggestions.map((pred, i) => (
+            <div
+              key={pred.place_id}
+              onMouseDown={() => handleSelect(pred)}
+              style={{
+                padding: "10px 14px", cursor: "pointer",
+                borderBottom: i < suggestions.length - 1 ? "1px solid #252525" : "none",
+              }}
+              onMouseEnter={e => e.currentTarget.style.background = "#272727"}
+              onMouseLeave={e => e.currentTarget.style.background = "transparent"}
+            >
+              <div style={{ fontSize: "13px", color: "#f0ebe0", fontFamily: "monospace" }}>
+                {pred.structured_formatting?.main_text || pred.description}
+              </div>
+              {pred.structured_formatting?.secondary_text && (
+                <div style={{ fontSize: "11px", color: "#555", fontFamily: "monospace", marginTop: "2px" }}>
+                  {pred.structured_formatting.secondary_text}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Tasting Card ─────────────────────────────────────────────────
 
 function TastingCard({ wine, onEdit, onDelete }) {
@@ -503,7 +615,7 @@ function TastingForm({ wine, onSave, onCancel }) {
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
           <Input label="Food Pairing" value={form.pairing} onChange={e => set("pairing", e.target.value)} />
           <Input label="Price" value={form.price} onChange={e => set("price", e.target.value)} placeholder="e.g. $66" />
-          <Input label="Where" value={form.location} onChange={e => set("location", e.target.value)} />
+          <PlacesAutocomplete label="Where" value={form.location} onChange={val => set("location", val)} />
           <Input label="Date" type="date" value={form.date} onChange={e => set("date", e.target.value)} />
         </div>
 
