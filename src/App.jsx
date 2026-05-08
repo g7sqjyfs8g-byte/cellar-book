@@ -489,19 +489,101 @@ function FindPrices({ wine }) {
   );
 }
 
+// ─── Tasting Detail Modal ─────────────────────────────────────────
+
+function TastingDetail({ wine, onEdit, onDelete, onClose }) {
+  const both = wine.jmRating != null && wine.nickyRating != null;
+  const avg = both ? ((wine.jmRating + wine.nickyRating) / 2).toFixed(1) : null;
+  const [sc, tc] = styleColors[wine.style] || ["#222", "#888"];
+
+  return (
+    <Modal title="" onClose={onClose}>
+      <div style={{ display: "flex", flexDirection: "column", gap: "18px" }}>
+        {/* Header */}
+        <div style={{ display: "flex", gap: "16px", alignItems: "flex-start" }}>
+          {wine.label && (
+            <img src={wine.label} alt="label" style={{ width: "64px", height: "88px", objectFit: "cover", borderRadius: "8px", border: "1px solid #333", flexShrink: 0 }} />
+          )}
+          <div style={{ flex: 1 }}>
+            <div style={{ display: "flex", gap: "8px", alignItems: "center", marginBottom: "6px", flexWrap: "wrap" }}>
+              <Badge label={wine.style} color={sc} text={tc} />
+              {wine.buyAgain && <Badge label="✓ Buy Again" color="#0e2a1a" text="#4caf79" />}
+            </div>
+            <div style={{ color: "#666", fontSize: "11px", fontFamily: "monospace", marginBottom: "2px" }}>
+              {wine.vintage || "NV"} · {wine.country}
+            </div>
+            <div style={{ fontFamily: "'Playfair Display', serif", fontSize: "22px", fontWeight: 700, color: "#f0ebe0", lineHeight: 1.2, marginBottom: "2px" }}>
+              {wine.name}
+            </div>
+            <div style={{ color: "#999", fontSize: "13px" }}>{wine.producer}</div>
+            {(wine.grape || wine.region) && (
+              <div style={{ color: "#555", fontSize: "11px", fontFamily: "monospace", marginTop: "2px" }}>
+                {wine.grape}{wine.region ? ` · ${wine.region}` : ""}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Ratings */}
+        <div style={{ display: "flex", gap: "24px" }}>
+          {[["JM", wine.jmRating, gold], ["NICKY", wine.nickyRating, blush], both && ["AVG", avg, "#f0ebe0"]].filter(Boolean).map(([lbl, val, col]) => (
+            <div key={lbl} style={{ textAlign: "center" }}>
+              <div style={{ fontSize: "9px", color: "#555", fontFamily: "monospace", letterSpacing: "1px", marginBottom: "2px" }}>{lbl}</div>
+              <div style={{ fontFamily: "'Playfair Display', serif", fontSize: "32px", fontWeight: 700, color: col }}>{val ?? "—"}</div>
+            </div>
+          ))}
+        </div>
+
+        {/* Notes */}
+        {wine.notes && (
+          <div style={{ background: "#131313", borderLeft: `2px solid ${gold}`, padding: "10px 14px", borderRadius: "4px", fontSize: "13px", color: "#bbb", fontStyle: "italic", lineHeight: 1.6 }}>
+            {wine.notes}
+          </div>
+        )}
+
+        {/* Details grid */}
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>
+          {[
+            ["Pairing",  wine.pairing],
+            ["Price",    wine.price],
+            ["Where",    wine.location],
+            ["Date",     wine.date],
+          ].filter(([, v]) => v).map(([label, value]) => (
+            <div key={label} style={{ background: "#131313", borderRadius: "8px", padding: "10px 12px" }}>
+              <div style={{ fontSize: "9px", color: "#555", fontFamily: "monospace", letterSpacing: "1px", marginBottom: "3px", textTransform: "uppercase" }}>{label}</div>
+              <div style={{ fontSize: "13px", color: "#ccc" }}>{value}</div>
+            </div>
+          ))}
+        </div>
+
+        {/* Actions */}
+        <div style={{ display: "flex", gap: "8px", alignItems: "center", paddingTop: "4px" }}>
+          <FindPrices wine={wine} />
+          <div style={{ marginLeft: "auto", display: "flex", gap: "8px" }}>
+            <Btn variant="danger" onClick={() => { onDelete(wine.id); onClose(); }}>Delete</Btn>
+            <Btn variant="gold" onClick={() => { onEdit(wine); onClose(); }}>Edit</Btn>
+          </div>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
 // ─── Tasting Card ─────────────────────────────────────────────────
 
-function TastingCard({ wine, onEdit, onDelete }) {
+function TastingCard({ wine, onView }) {
   const both = wine.jmRating != null && wine.nickyRating != null;
   const avg = both ? ((wine.jmRating + wine.nickyRating) / 2).toFixed(1) : (wine.jmRating ?? wine.nickyRating ?? null);
   const [sc, tc] = styleColors[wine.style] || ["#222", "#888"];
   return (
-    <div style={{
-      background: "linear-gradient(160deg, #1c1c1c 0%, #202020 100%)",
-      border: "1px solid #2a2a2a", borderRadius: "16px",
-      padding: "22px", position: "relative", overflow: "hidden",
-      transition: "transform 0.18s, box-shadow 0.18s",
-    }}
+    <div
+      onClick={onView}
+      style={{
+        background: "linear-gradient(160deg, #1c1c1c 0%, #202020 100%)",
+        border: "1px solid #2a2a2a", borderRadius: "16px",
+        padding: "22px", position: "relative", overflow: "hidden",
+        transition: "transform 0.18s, box-shadow 0.18s", cursor: "pointer",
+      }}
       onMouseEnter={e => { e.currentTarget.style.transform = "translateY(-2px)"; e.currentTarget.style.boxShadow = "0 10px 36px rgba(0,0,0,0.45)"; }}
       onMouseLeave={e => { e.currentTarget.style.transform = ""; e.currentTarget.style.boxShadow = ""; }}
     >
@@ -539,19 +621,8 @@ function TastingCard({ wine, onEdit, onDelete }) {
         </div>
       )}
 
-      <div style={{ display: "flex", gap: "12px", flexWrap: "wrap", marginBottom: "10px" }}>
-        {wine.pairing && <span style={{ fontSize: "11px", color: "#666" }}>🍽 {wine.pairing}</span>}
-        {wine.price && <span style={{ fontSize: "11px", color: "#666" }}>💰 {wine.price}</span>}
-        {wine.date && <span style={{ fontSize: "11px", color: "#666" }}>📅 {wine.date}</span>}
-      </div>
-
-      <div style={{ display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap" }}>
+      <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
         {wine.buyAgain && <Badge label="✓ Buy Again" color="#0e2a1a" text="#4caf79" />}
-        <div style={{ marginLeft: "auto", display: "flex", gap: "6px", alignItems: "center" }}>
-          <FindPrices wine={wine} />
-          <Btn onClick={() => onEdit(wine)}>Edit</Btn>
-          <Btn variant="danger" onClick={() => onDelete(wine.id)}>✕</Btn>
-        </div>
       </div>
     </div>
   );
@@ -1716,6 +1787,7 @@ export default function App() {
   const [showScanModal, setShowScanModal] = useState(false);
   const [showTastingForm, setShowTastingForm] = useState(false);
   const [editTasting, setEditTasting] = useState(null);
+  const [viewTasting, setViewTasting] = useState(null);
   const [showCellarForm, setShowCellarForm] = useState(false);
   const [editCellar, setEditCellar] = useState(null);
 
@@ -1893,9 +1965,7 @@ export default function App() {
               </div>
             )}
             {filteredTastings.map(w => (
-              <TastingCard key={w.id} wine={w}
-                onEdit={w => { setEditTasting(w); setShowTastingForm(true); }}
-                onDelete={deleteTasting} />
+              <TastingCard key={w.id} wine={w} onView={() => setViewTasting(w)} />
             ))}
           </div>
         </div>
@@ -1959,6 +2029,14 @@ export default function App() {
           onAddToTasting={handleScanToTasting}
           onAddToCellar={handleScanToCellar}
           onClose={() => setShowScanModal(false)}
+        />
+      )}
+      {viewTasting && (
+        <TastingDetail
+          wine={viewTasting}
+          onClose={() => setViewTasting(null)}
+          onEdit={w => { setViewTasting(null); setEditTasting(w); setShowTastingForm(true); }}
+          onDelete={id => { setViewTasting(null); deleteTasting(id); }}
         />
       )}
       {showTastingForm && (
