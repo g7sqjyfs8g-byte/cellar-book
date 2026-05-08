@@ -12,6 +12,24 @@ function parseImageDataUrl(dataUrl) {
   return { mediaType, data: match[2] };
 }
 
+// Compress and resize an image to stay within Vercel's 4.5MB body limit.
+// Resizes to max 1200px on the long edge and re-encodes as JPEG.
+function compressImage(dataUrl, maxPx = 1200, quality = 0.82) {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => {
+      const scale = Math.min(1, maxPx / Math.max(img.width, img.height));
+      const canvas = document.createElement("canvas");
+      canvas.width  = Math.round(img.width  * scale);
+      canvas.height = Math.round(img.height * scale);
+      canvas.getContext("2d").drawImage(img, 0, 0, canvas.width, canvas.height);
+      resolve(canvas.toDataURL("image/jpeg", quality));
+    };
+    img.onerror = () => resolve(dataUrl); // fall back to original on failure
+    img.src = dataUrl;
+  });
+}
+
 async function callClaude({ messages, system, maxTokens = 1024 }) {
   let res;
   try {
@@ -378,7 +396,7 @@ function TastingForm({ wine, onSave, onCancel }) {
     const file = e.target.files[0];
     if (!file) return;
     const reader = new FileReader();
-    reader.onload = () => set("label", reader.result);
+    reader.onload = async () => set("label", await compressImage(reader.result));
     reader.readAsDataURL(file);
   };
 
@@ -502,7 +520,7 @@ function CellarForm({ wine, onSave, onCancel }) {
     const file = e.target.files[0];
     if (!file) return;
     const reader = new FileReader();
-    reader.onload = () => setLabelImg(reader.result);
+    reader.onload = async () => setLabelImg(await compressImage(reader.result));
     reader.readAsDataURL(file);
   };
 
@@ -1040,7 +1058,7 @@ function Sommelier({ tastings }) {
               </>}
             </div>
             <input ref={fileRef} type="file" accept="image/*" capture="environment"
-              onChange={e => { const f = e.target.files[0]; if (!f) return; const r = new FileReader(); r.onload = () => setWineListImg(r.result); r.readAsDataURL(f); }}
+              onChange={e => { const f = e.target.files[0]; if (!f) return; const r = new FileReader(); r.onload = async () => setWineListImg(await compressImage(r.result)); r.readAsDataURL(f); }}
               style={{ display: "none" }} />
             {wineListImg && <img src={wineListImg} alt="Wine list" style={{ marginTop: "10px", maxHeight: "160px", borderRadius: "8px", objectFit: "contain", border: "1px solid #2a2a2a" }} />}
           </div>
@@ -1065,7 +1083,7 @@ function Sommelier({ tastings }) {
               )}
             </div>
             <input ref={bottleFileRef} type="file" accept="image/*" capture="environment"
-              onChange={e => { const f = e.target.files[0]; if (!f) return; const r = new FileReader(); r.onload = () => setBottleImg(r.result); r.readAsDataURL(f); e.target.value = ""; }}
+              onChange={e => { const f = e.target.files[0]; if (!f) return; const r = new FileReader(); r.onload = async () => setBottleImg(await compressImage(r.result)); r.readAsDataURL(f); e.target.value = ""; }}
               style={{ display: "none" }} />
           </div>
           {bottleImg && (
@@ -1128,7 +1146,7 @@ function ScanBottleModal({ onAddToTasting, onAddToCellar, onClose }) {
     const file = e.target.files[0];
     if (!file) return;
     const reader = new FileReader();
-    reader.onload = () => { setImage(reader.result); readLabel(reader.result); };
+    reader.onload = async () => { const compressed = await compressImage(reader.result); setImage(compressed); readLabel(compressed); };
     reader.readAsDataURL(file);
   };
 

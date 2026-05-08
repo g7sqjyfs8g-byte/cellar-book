@@ -1,0 +1,10 @@
+{
+  "functions": {
+    "api/claude.js": {
+      "maxDuration": 30
+    },
+    "api/sheets.js": {
+      "maxDuration": 15
+    }
+  }
+}
