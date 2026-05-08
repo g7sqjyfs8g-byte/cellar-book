@@ -12,9 +12,10 @@ function parseImageDataUrl(dataUrl) {
   return { mediaType, data: match[2] };
 }
 
-// Compress and resize an image to stay within Vercel's 4.5MB body limit.
-// Resizes to max 1200px on the long edge and re-encodes as JPEG.
-function compressImage(dataUrl, maxPx = 1200, quality = 0.82) {
+// Resize to max 1200px and re-encode as PNG via canvas.
+// PNG is chosen over JPEG because Safari's canvas JPEG encoder can produce
+// non-standard bytes that Anthropic rejects with "Could not process image".
+function compressImage(dataUrl, maxPx = 1200) {
   return new Promise((resolve) => {
     const img = new Image();
     img.onload = () => {
@@ -22,15 +23,32 @@ function compressImage(dataUrl, maxPx = 1200, quality = 0.82) {
       const canvas = document.createElement("canvas");
       canvas.width  = Math.round(img.width  * scale);
       canvas.height = Math.round(img.height * scale);
-      canvas.getContext("2d").drawImage(img, 0, 0, canvas.width, canvas.height);
-      resolve(canvas.toDataURL("image/jpeg", quality));
+      const ctx = canvas.getContext("2d");
+      if (!ctx) { resolve(dataUrl); return; }
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+      const out = canvas.toDataURL("image/png");
+      console.log(`[compressImage] ${img.width}x${img.height} → ${canvas.width}x${canvas.height}, ~${Math.round(out.length / 1024)}KB base64`);
+      resolve(out);
     };
-    img.onerror = () => resolve(dataUrl); // fall back to original on failure
+    img.onerror = () => {
+      console.error("[compressImage] Could not load image — sending original");
+      resolve(dataUrl);
+    };
     img.src = dataUrl;
   });
 }
 
 async function callClaude({ messages, system, maxTokens = 1024 }) {
+  // Log image details before sending to help diagnose API errors
+  messages.forEach((m, mi) => {
+    if (!Array.isArray(m.content)) return;
+    m.content.forEach((c, ci) => {
+      if (c.type === "image") {
+        console.log(`[callClaude] msg[${mi}].content[${ci}] image: media_type=${c.source?.media_type}, data length=${c.source?.data?.length ?? 0}`);
+      }
+    });
+  });
+
   let res;
   try {
     res = await fetch("/api/claude", {
