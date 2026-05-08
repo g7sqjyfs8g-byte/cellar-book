@@ -135,7 +135,7 @@ function setupSheets() {
   if (!t) t = ss.insertSheet("Tastings");
   if (t.getLastRow() === 0) {
     const headers = ["id","name","producer","vintage","region","country","grape","style",
-                     "jmRating","nickyRating","notes","pairing","price","location","buyAgain","date"];
+                     "jmRating","nickyRating","notes","pairing","price","location","buyAgain","date","label"];
     t.appendRow(headers);
     t.getRange(1, 1, 1, headers.length).setFontWeight("bold");
   }
@@ -144,7 +144,7 @@ function setupSheets() {
   if (!c) c = ss.insertSheet("Cellar");
   if (c.getLastRow() === 0) {
     const headers = ["id","name","producer","vintage","region","country","grape","style",
-                     "quantity","drinkFrom","drinkBy","price","location","notes","dateAdded"];
+                     "quantity","drinkFrom","drinkBy","price","location","notes","dateAdded","label"];
     c.appendRow(headers);
     c.getRange(1, 1, 1, headers.length).setFontWeight("bold");
   }

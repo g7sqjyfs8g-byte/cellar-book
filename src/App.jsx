@@ -44,6 +44,28 @@ function compressImage(dataUrl, maxPx = 1200) {
   });
 }
 
+// Tiny thumbnail for Google Sheets storage (≤ 45,000 chars per cell limit).
+// Returns null if compression still exceeds the limit.
+function compressForSheet(dataUrl) {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => {
+      const maxPx = 160;
+      const scale = Math.min(1, maxPx / Math.max(img.width, img.height));
+      const canvas = document.createElement("canvas");
+      canvas.width  = Math.round(img.width  * scale);
+      canvas.height = Math.round(img.height * scale);
+      const ctx = canvas.getContext("2d");
+      if (!ctx) { resolve(null); return; }
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+      const out = canvas.toDataURL("image/jpeg", 0.6);
+      resolve(out.length <= 45000 ? out : null);
+    };
+    img.onerror = () => resolve(null);
+    img.src = dataUrl;
+  });
+}
+
 async function callClaude({ messages, system, maxTokens = 1024 }) {
   // Log image details before sending to help diagnose API errors
   messages.forEach((m, mi) => {
@@ -188,8 +210,8 @@ async function sheetsReplace(sheet, rows) {
   if (!res.ok) throw new Error(`Sheets ${res.status}`);
 }
 
-// Strip base64 label image before writing — too large for a spreadsheet cell
-const toSheetTasting = ({ label, ...row }) => row;
+// Pass all fields through; callers replace label with a compressed thumbnail before upserting
+const toSheetTasting = (row) => row;
 
 // Coerce types when reading back from sheets (cells may return numbers, booleans, or empty strings)
 const fromSheetTasting = (row) => ({
@@ -200,7 +222,7 @@ const fromSheetTasting = (row) => ({
   buyAgain: row.buyAgain === true || row.buyAgain === "TRUE" || row.buyAgain === "true" ? true
     : row.buyAgain === false || row.buyAgain === "FALSE" || row.buyAgain === "false" ? false
     : null,
-  label: null,
+  label: row.label || null,
 });
 
 const fromSheetCellar = (row) => ({
@@ -209,6 +231,7 @@ const fromSheetCellar = (row) => ({
   quantity: row.quantity !== null && row.quantity !== "" ? Number(row.quantity) : 0,
   drinkFrom: row.drinkFrom ? Number(row.drinkFrom) : null,
   drinkBy: row.drinkBy ? Number(row.drinkBy) : null,
+  label: row.label || null,
 });
 
 // ─── Tiny components ────────────────────────────────────────────────
@@ -426,8 +449,11 @@ function TastingCard({ wine, onEdit, onDelete }) {
       onMouseLeave={e => { e.currentTarget.style.transform = ""; e.currentTarget.style.boxShadow = ""; }}
     >
       <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: "3px", background: tc, opacity: 0.7 }} />
-      <div style={{ position: "absolute", top: "16px", right: "16px" }}>
+      <div style={{ position: "absolute", top: "16px", right: "16px", display: "flex", flexDirection: "column", alignItems: "flex-end", gap: "8px" }}>
         <Badge label={wine.style} color={sc} text={tc} />
+        {wine.label && (
+          <img src={wine.label} alt="label" style={{ height: "72px", width: "52px", objectFit: "cover", borderRadius: "6px", border: "1px solid #333", background: "#111" }} />
+        )}
       </div>
 
       <div style={{ color: "#666", fontSize: "12px", fontFamily: "monospace", marginBottom: "3px" }}>
@@ -487,6 +513,9 @@ function CellarRow({ wine, onEdit, onDelete, onQty }) {
       display: "flex", alignItems: "center", gap: "14px", flexWrap: "wrap",
     }}>
       <div style={{ width: "6px", height: "40px", borderRadius: "3px", background: tc, flexShrink: 0 }} />
+      {wine.label && (
+        <img src={wine.label} alt="label" style={{ height: "44px", width: "32px", objectFit: "cover", borderRadius: "4px", border: "1px solid #2e2e2e", flexShrink: 0 }} />
+      )}
       <div style={{ flex: 1, minWidth: "160px" }}>
         <div style={{ fontFamily: "'Playfair Display', serif", fontSize: "16px", color: "#f0ebe0", lineHeight: 1.2 }}>{wine.name}</div>
         <div style={{ fontSize: "11px", color: "#666", fontFamily: "monospace" }}>
@@ -640,7 +669,7 @@ function CellarForm({ wine, onSave, onCancel }) {
     name: "", producer: "", vintage: "", region: "", country: "Australia",
     grape: "", style: "Red", quantity: 1, drinkFrom: "", drinkBy: "",
     price: "", location: "John's Cellar", notes: "",
-    dateAdded: new Date().toISOString().split("T")[0],
+    dateAdded: new Date().toISOString().split("T")[0], label: null,
   };
   const [form, setForm] = useState(wine ? {
     ...wine,
@@ -649,7 +678,6 @@ function CellarForm({ wine, onSave, onCancel }) {
     drinkBy: wine.drinkBy ?? "",
   } : blank);
   const [aiLoading, setAiLoading] = useState(false);
-  const [labelImg, setLabelImg] = useState(null);
   const fileRef = useRef();
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
 
@@ -658,15 +686,15 @@ function CellarForm({ wine, onSave, onCancel }) {
     if (!file) return;
     if (isHeic(file)) { alert(HEIC_MSG); e.target.value = ""; return; }
     const reader = new FileReader();
-    reader.onload = async () => { try { setLabelImg(await compressImage(reader.result)); } catch (err) { alert(err.message); } };
+    reader.onload = async () => { try { set("label", await compressImage(reader.result)); } catch (err) { alert(err.message); } };
     reader.readAsDataURL(file);
   };
 
   const handleAI = async () => {
-    if (!labelImg) return;
+    if (!form.label) return;
     setAiLoading(true);
     try {
-      const { mediaType, data: imgData } = parseImageDataUrl(labelImg);
+      const { mediaType, data: imgData } = parseImageDataUrl(form.label);
       const raw = await callClaude({
         maxTokens: 500,
         messages: [{ role: "user", content: [
@@ -706,10 +734,10 @@ function CellarForm({ wine, onSave, onCancel }) {
           <div style={{ fontSize: "10px", color: "#666", fontFamily: "monospace", letterSpacing: "1px", marginBottom: "6px", textTransform: "uppercase" }}>Label photo (optional)</div>
           <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
             <Btn onClick={() => fileRef.current.click()} style={{ background: "#242424", border: "1px dashed #444", color: "#aaa" }}>📷 Upload</Btn>
-            {labelImg && <Btn variant="outline" onClick={handleAI} disabled={aiLoading}>{aiLoading ? "Reading…" : "✨ Auto-fill from label"}</Btn>}
+            {form.label && <Btn variant="outline" onClick={handleAI} disabled={aiLoading}>{aiLoading ? "Reading…" : "✨ Auto-fill from label"}</Btn>}
           </div>
           <input ref={fileRef} type="file" accept="image/*" onChange={handleImage} style={{ display: "none" }} />
-          {labelImg && <img src={labelImg} alt="" style={{ marginTop: "10px", height: "90px", borderRadius: "8px", objectFit: "contain", border: "1px solid #333" }} />}
+          {form.label && <img src={form.label} alt="" style={{ marginTop: "10px", height: "90px", borderRadius: "8px", objectFit: "contain", border: "1px solid #333" }} />}
         </div>
 
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
@@ -1673,10 +1701,11 @@ export default function App() {
   };
 
   // Tastings actions
-  const saveTasting = (w) => {
+  const saveTasting = async (w) => {
     setTastings(ts => w.id && ts.find(t => t.id === w.id) ? ts.map(t => t.id === w.id ? w : t) : [w, ...ts]);
     setShowTastingForm(false); setEditTasting(null);
-    syncWrap(() => sheetsUpsert("tastings", toSheetTasting(w)));
+    const thumbnail = w.label ? await compressForSheet(w.label) : null;
+    syncWrap(() => sheetsUpsert("tastings", { ...w, label: thumbnail }));
   };
   const deleteTasting = (id) => {
     if (!confirm("Remove this tasting?")) return;
@@ -1685,10 +1714,11 @@ export default function App() {
   };
 
   // Cellar actions
-  const saveCellar = (w) => {
+  const saveCellar = async (w) => {
     setCellar(cs => w.id && cs.find(c => c.id === w.id) ? cs.map(c => c.id === w.id ? w : c) : [w, ...cs]);
     setShowCellarForm(false); setEditCellar(null);
-    syncWrap(() => sheetsUpsert("cellar", w));
+    const thumbnail = w.label ? await compressForSheet(w.label) : null;
+    syncWrap(() => sheetsUpsert("cellar", { ...w, label: thumbnail }));
   };
   const deleteCellar = (id) => {
     if (!confirm("Remove from cellar?")) return;
