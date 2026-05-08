@@ -432,6 +432,63 @@ function PlacesAutocomplete({ label, value, onChange }) {
   );
 }
 
+// ─── Find Prices ──────────────────────────────────────────────────
+
+function FindPrices({ wine }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+
+  useEffect(() => {
+    const close = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
+    document.addEventListener("mousedown", close);
+    return () => document.removeEventListener("mousedown", close);
+  }, []);
+
+  const q = encodeURIComponent([wine.producer, wine.name, wine.vintage].filter(Boolean).join(" "));
+
+  const stores = [
+    { label: "Google Shopping", url: `https://www.google.com/search?q=${q}+wine&tbm=shop` },
+    { label: "Vivino",          url: `https://www.vivino.com/search/wines?q=${q}` },
+    { label: "Dan Murphy's",    url: `https://www.danmurphys.com.au/search?searchTerm=${q}` },
+    { label: "BWS",             url: `https://www.bws.com.au/search?searchQuery=${q}` },
+  ];
+
+  return (
+    <div ref={ref} style={{ position: "relative" }}>
+      <Btn onClick={() => setOpen(o => !o)} style={{ fontSize: "11px", padding: "5px 10px" }}>
+        🔍 Find prices
+      </Btn>
+      {open && (
+        <div style={{
+          position: "absolute", bottom: "calc(100% + 6px)", left: 0, zIndex: 500,
+          background: "#1c1c1c", border: "1px solid #2e2e2e", borderRadius: "10px",
+          overflow: "hidden", boxShadow: "0 8px 24px rgba(0,0,0,0.6)", minWidth: "160px",
+        }}>
+          {stores.map((s, i) => (
+            <a
+              key={s.label}
+              href={s.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={() => setOpen(false)}
+              style={{
+                display: "block", padding: "10px 14px",
+                fontSize: "12px", color: "#c9a84c", fontFamily: "monospace",
+                textDecoration: "none",
+                borderBottom: i < stores.length - 1 ? "1px solid #252525" : "none",
+              }}
+              onMouseEnter={e => e.currentTarget.style.background = "#272727"}
+              onMouseLeave={e => e.currentTarget.style.background = "transparent"}
+            >
+              {s.label}
+            </a>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Tasting Card ─────────────────────────────────────────────────
 
 function TastingCard({ wine, onEdit, onDelete }) {
@@ -488,9 +545,10 @@ function TastingCard({ wine, onEdit, onDelete }) {
         {wine.date && <span style={{ fontSize: "11px", color: "#666" }}>📅 {wine.date}</span>}
       </div>
 
-      <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+      <div style={{ display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap" }}>
         {wine.buyAgain && <Badge label="✓ Buy Again" color="#0e2a1a" text="#4caf79" />}
-        <div style={{ marginLeft: "auto", display: "flex", gap: "6px" }}>
+        <div style={{ marginLeft: "auto", display: "flex", gap: "6px", alignItems: "center" }}>
+          <FindPrices wine={wine} />
           <Btn onClick={() => onEdit(wine)}>Edit</Btn>
           <Btn variant="danger" onClick={() => onDelete(wine.id)}>✕</Btn>
         </div>
@@ -535,7 +593,8 @@ function CellarRow({ wine, onEdit, onDelete, onQty }) {
         <Btn onClick={() => onQty(wine.id, 1)} style={{ padding: "5px 12px", fontSize: "16px" }}>+</Btn>
       </div>
 
-      <div style={{ display: "flex", gap: "6px" }}>
+      <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
+        <FindPrices wine={wine} />
         <Btn onClick={() => onEdit(wine)} style={{ padding: "7px 13px" }}>Edit</Btn>
         <Btn variant="danger" onClick={() => onDelete(wine.id)} style={{ padding: "7px 13px" }}>✕</Btn>
       </div>
