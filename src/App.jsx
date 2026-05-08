@@ -628,19 +628,108 @@ function TastingCard({ wine, onView }) {
   );
 }
 
+// ─── Cellar Detail Modal ──────────────────────────────────────────
+
+function CellarDetail({ wine, onEdit, onDelete, onQty, onClose }) {
+  const [sc, tc] = styleColors[wine.style] || ["#222", "#888"];
+  const currentYear = new Date().getFullYear();
+  const readyNow = wine.drinkFrom ? currentYear >= wine.drinkFrom : true;
+  const overdue = wine.drinkBy ? currentYear > wine.drinkBy : false;
+
+  return (
+    <Modal title="" onClose={onClose}>
+      <div style={{ display: "flex", flexDirection: "column", gap: "18px" }}>
+        {/* Header */}
+        <div style={{ display: "flex", gap: "16px", alignItems: "flex-start" }}>
+          {wine.label && (
+            <img src={wine.label} alt="label" style={{ width: "64px", height: "88px", objectFit: "cover", borderRadius: "8px", border: "1px solid #333", flexShrink: 0 }} />
+          )}
+          <div style={{ flex: 1 }}>
+            <div style={{ display: "flex", gap: "8px", alignItems: "center", marginBottom: "6px", flexWrap: "wrap" }}>
+              <Badge label={wine.style} color={sc} text={tc} />
+              {overdue && <Badge label="Drink now!" color="#3a1010" text="#e05050" />}
+              {!overdue && readyNow && wine.drinkBy && <Badge label="Ready" color="#0e2a1a" text="#4caf79" />}
+              {!readyNow && <Badge label={`From ${wine.drinkFrom}`} color="#1a1a2a" text="#6a8ad8" />}
+            </div>
+            <div style={{ color: "#666", fontSize: "11px", fontFamily: "monospace", marginBottom: "2px" }}>
+              {wine.vintage || "NV"} · {wine.country}
+            </div>
+            <div style={{ fontFamily: "'Playfair Display', serif", fontSize: "22px", fontWeight: 700, color: "#f0ebe0", lineHeight: 1.2, marginBottom: "2px" }}>
+              {wine.name}
+            </div>
+            <div style={{ color: "#999", fontSize: "13px" }}>{wine.producer}</div>
+            {(wine.grape || wine.region) && (
+              <div style={{ color: "#555", fontSize: "11px", fontFamily: "monospace", marginTop: "2px" }}>
+                {wine.grape}{wine.region ? ` · ${wine.region}` : ""}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Quantity adjuster */}
+        <div style={{ display: "flex", alignItems: "center", gap: "16px", background: "#131313", borderRadius: "10px", padding: "12px 16px" }}>
+          <div style={{ fontSize: "10px", color: "#555", fontFamily: "monospace", letterSpacing: "1px", textTransform: "uppercase", flex: 1 }}>Bottles in cellar</div>
+          <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+            <Btn onClick={() => onQty(wine.id, -1)} style={{ padding: "5px 14px", fontSize: "18px" }}>−</Btn>
+            <div style={{ fontFamily: "'Playfair Display', serif", fontSize: "28px", fontWeight: 700, color: gold, minWidth: "32px", textAlign: "center" }}>{wine.quantity}</div>
+            <Btn onClick={() => onQty(wine.id, 1)} style={{ padding: "5px 14px", fontSize: "18px" }}>+</Btn>
+          </div>
+        </div>
+
+        {/* Details grid */}
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>
+          {[
+            ["Drink from",  wine.drinkFrom],
+            ["Drink by",    wine.drinkBy],
+            ["Price paid",  wine.price],
+            ["Location",    wine.location],
+            ["Added",       wine.dateAdded],
+          ].filter(([, v]) => v).map(([label, value]) => (
+            <div key={label} style={{ background: "#131313", borderRadius: "8px", padding: "10px 12px" }}>
+              <div style={{ fontSize: "9px", color: "#555", fontFamily: "monospace", letterSpacing: "1px", marginBottom: "3px", textTransform: "uppercase" }}>{label}</div>
+              <div style={{ fontSize: "13px", color: "#ccc" }}>{value}</div>
+            </div>
+          ))}
+        </div>
+
+        {wine.notes && (
+          <div style={{ background: "#131313", borderLeft: `2px solid ${gold}`, padding: "10px 14px", borderRadius: "4px", fontSize: "13px", color: "#bbb", fontStyle: "italic", lineHeight: 1.6 }}>
+            {wine.notes}
+          </div>
+        )}
+
+        {/* Actions */}
+        <div style={{ display: "flex", gap: "8px", alignItems: "center", paddingTop: "4px" }}>
+          <FindPrices wine={wine} />
+          <div style={{ marginLeft: "auto", display: "flex", gap: "8px" }}>
+            <Btn variant="danger" onClick={() => { onDelete(wine.id); onClose(); }}>Delete</Btn>
+            <Btn variant="gold" onClick={() => { onEdit(wine); onClose(); }}>Edit</Btn>
+          </div>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
 // ─── Cellar Row ────────────────────────────────────────────────────
 
-function CellarRow({ wine, onEdit, onDelete, onQty }) {
+function CellarRow({ wine, onView, onQty }) {
   const [sc, tc] = styleColors[wine.style] || ["#222", "#888"];
   const currentYear = new Date().getFullYear();
   const readyNow = wine.drinkFrom ? currentYear >= wine.drinkFrom : true;
   const overdue = wine.drinkBy ? currentYear > wine.drinkBy : false;
   return (
-    <div style={{
-      background: "#1a1a1a", border: "1px solid #272727",
-      borderRadius: "12px", padding: "14px 18px",
-      display: "flex", alignItems: "center", gap: "14px", flexWrap: "wrap",
-    }}>
+    <div
+      onClick={onView}
+      style={{
+        background: "#1a1a1a", border: "1px solid #272727",
+        borderRadius: "12px", padding: "14px 18px", cursor: "pointer",
+        display: "flex", alignItems: "center", gap: "14px", flexWrap: "wrap",
+        transition: "background 0.15s",
+      }}
+      onMouseEnter={e => e.currentTarget.style.background = "#1e1e1e"}
+      onMouseLeave={e => e.currentTarget.style.background = "#1a1a1a"}
+    >
       <div style={{ width: "6px", height: "40px", borderRadius: "3px", background: tc, flexShrink: 0 }} />
       {wine.label && (
         <img src={wine.label} alt="label" style={{ height: "44px", width: "32px", objectFit: "cover", borderRadius: "4px", border: "1px solid #2e2e2e", flexShrink: 0 }} />
@@ -658,16 +747,10 @@ function CellarRow({ wine, onEdit, onDelete, onQty }) {
         {!readyNow && <Badge label={`From ${wine.drinkFrom}`} color="#1a1a2a" text="#6a8ad8" />}
       </div>
 
-      <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: "8px" }} onClick={e => e.stopPropagation()}>
         <Btn onClick={() => onQty(wine.id, -1)} style={{ padding: "5px 12px", fontSize: "16px" }}>−</Btn>
         <div style={{ fontFamily: "'Playfair Display', serif", fontSize: "22px", fontWeight: 700, color: gold, minWidth: "28px", textAlign: "center" }}>{wine.quantity}</div>
         <Btn onClick={() => onQty(wine.id, 1)} style={{ padding: "5px 12px", fontSize: "16px" }}>+</Btn>
-      </div>
-
-      <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
-        <FindPrices wine={wine} />
-        <Btn onClick={() => onEdit(wine)} style={{ padding: "7px 13px" }}>Edit</Btn>
-        <Btn variant="danger" onClick={() => onDelete(wine.id)} style={{ padding: "7px 13px" }}>✕</Btn>
       </div>
     </div>
   );
@@ -1790,6 +1873,7 @@ export default function App() {
   const [viewTasting, setViewTasting] = useState(null);
   const [showCellarForm, setShowCellarForm] = useState(false);
   const [editCellar, setEditCellar] = useState(null);
+  const [viewCellar, setViewCellar] = useState(null);
 
   const [tFilter, setTFilter] = useState("All");
   const [tSort, setTSort] = useState("date");
@@ -1989,10 +2073,7 @@ export default function App() {
               </div>
             )}
             {filteredCellar.map(w => (
-              <CellarRow key={w.id} wine={w}
-                onEdit={w => { setEditCellar(w); setShowCellarForm(true); }}
-                onDelete={deleteCellar}
-                onQty={adjustQty} />
+              <CellarRow key={w.id} wine={w} onView={() => setViewCellar(w)} onQty={adjustQty} />
             ))}
           </div>
         </div>
@@ -2041,6 +2122,15 @@ export default function App() {
       )}
       {showTastingForm && (
         <TastingForm wine={editTasting} onSave={saveTasting} onCancel={() => { setShowTastingForm(false); setEditTasting(null); }} />
+      )}
+      {viewCellar && (
+        <CellarDetail
+          wine={viewCellar}
+          onClose={() => setViewCellar(null)}
+          onEdit={w => { setViewCellar(null); setEditCellar(w); setShowCellarForm(true); }}
+          onDelete={id => { setViewCellar(null); deleteCellar(id); }}
+          onQty={(id, delta) => { adjustQty(id, delta); setViewCellar(c => ({ ...c, quantity: Math.max(0, (c.quantity || 0) + delta) })); }}
+        />
       )}
       {showCellarForm && (
         <CellarForm wine={editCellar} onSave={saveCellar} onCancel={() => { setShowCellarForm(false); setEditCellar(null); }} />
