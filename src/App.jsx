@@ -12,11 +12,20 @@ function parseImageDataUrl(dataUrl) {
   return { mediaType, data: match[2] };
 }
 
+// Returns true for HEIC/HEIF files, which desktop browsers cannot decode.
+function isHeic(file) {
+  if (!file) return false;
+  const name = file.name?.toLowerCase() ?? "";
+  return file.type === "image/heic" || file.type === "image/heif" ||
+    name.endsWith(".heic") || name.endsWith(".heif");
+}
+
+const HEIC_MSG = "HEIC images can't be processed on desktop browsers.\n\nPlease convert to JPEG first:\n• Mac: open in Preview → File → Export → select JPEG\n• iPhone: Settings → Camera → Formats → Most Compatible (shoots JPEG instead)";
+
 // Resize to max 1200px and re-encode as PNG via canvas.
-// PNG is chosen over JPEG because Safari's canvas JPEG encoder can produce
-// non-standard bytes that Anthropic rejects with "Could not process image".
+// Throws if the browser can't decode the image (e.g. HEIC on non-Safari).
 function compressImage(dataUrl, maxPx = 1200) {
-  return new Promise((resolve) => {
+  return new Promise((resolve, reject) => {
     const img = new Image();
     img.onload = () => {
       const scale = Math.min(1, maxPx / Math.max(img.width, img.height));
@@ -24,16 +33,13 @@ function compressImage(dataUrl, maxPx = 1200) {
       canvas.width  = Math.round(img.width  * scale);
       canvas.height = Math.round(img.height * scale);
       const ctx = canvas.getContext("2d");
-      if (!ctx) { resolve(dataUrl); return; }
+      if (!ctx) { reject(new Error("Canvas unavailable")); return; }
       ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
       const out = canvas.toDataURL("image/png");
-      console.log(`[compressImage] ${img.width}x${img.height} → ${canvas.width}x${canvas.height}, ~${Math.round(out.length / 1024)}KB base64`);
+      console.log(`[compressImage] ${img.width}x${img.height} → ${canvas.width}x${canvas.height}, ~${Math.round(out.length / 1024)}KB`);
       resolve(out);
     };
-    img.onerror = () => {
-      console.error("[compressImage] Could not load image — sending original");
-      resolve(dataUrl);
-    };
+    img.onerror = () => reject(new Error("Browser could not decode this image format. If it's a HEIC file, please convert to JPEG first."));
     img.src = dataUrl;
   });
 }
@@ -413,8 +419,9 @@ function TastingForm({ wine, onSave, onCancel }) {
   const handleImage = (e) => {
     const file = e.target.files[0];
     if (!file) return;
+    if (isHeic(file)) { alert(HEIC_MSG); e.target.value = ""; return; }
     const reader = new FileReader();
-    reader.onload = async () => set("label", await compressImage(reader.result));
+    reader.onload = async () => { try { set("label", await compressImage(reader.result)); } catch (err) { alert(err.message); } };
     reader.readAsDataURL(file);
   };
 
@@ -537,8 +544,9 @@ function CellarForm({ wine, onSave, onCancel }) {
   const handleImage = (e) => {
     const file = e.target.files[0];
     if (!file) return;
+    if (isHeic(file)) { alert(HEIC_MSG); e.target.value = ""; return; }
     const reader = new FileReader();
-    reader.onload = async () => setLabelImg(await compressImage(reader.result));
+    reader.onload = async () => { try { setLabelImg(await compressImage(reader.result)); } catch (err) { alert(err.message); } };
     reader.readAsDataURL(file);
   };
 
@@ -1076,7 +1084,7 @@ function Sommelier({ tastings }) {
               </>}
             </div>
             <input ref={fileRef} type="file" accept="image/*" capture="environment"
-              onChange={e => { const f = e.target.files[0]; if (!f) return; const r = new FileReader(); r.onload = async () => setWineListImg(await compressImage(r.result)); r.readAsDataURL(f); }}
+              onChange={e => { const f = e.target.files[0]; if (!f) return; if (isHeic(f)) { alert(HEIC_MSG); e.target.value = ""; return; } const r = new FileReader(); r.onload = async () => { try { setWineListImg(await compressImage(r.result)); } catch (err) { alert(err.message); } }; r.readAsDataURL(f); }}
               style={{ display: "none" }} />
             {wineListImg && <img src={wineListImg} alt="Wine list" style={{ marginTop: "10px", maxHeight: "160px", borderRadius: "8px", objectFit: "contain", border: "1px solid #2a2a2a" }} />}
           </div>
@@ -1101,7 +1109,7 @@ function Sommelier({ tastings }) {
               )}
             </div>
             <input ref={bottleFileRef} type="file" accept="image/*" capture="environment"
-              onChange={e => { const f = e.target.files[0]; if (!f) return; const r = new FileReader(); r.onload = async () => setBottleImg(await compressImage(r.result)); r.readAsDataURL(f); e.target.value = ""; }}
+              onChange={e => { const f = e.target.files[0]; if (!f) return; if (isHeic(f)) { alert(HEIC_MSG); e.target.value = ""; return; } const r = new FileReader(); r.onload = async () => { try { setBottleImg(await compressImage(r.result)); } catch (err) { alert(err.message); } }; r.readAsDataURL(f); e.target.value = ""; }}
               style={{ display: "none" }} />
           </div>
           {bottleImg && (
@@ -1163,8 +1171,12 @@ function ScanBottleModal({ onAddToTasting, onAddToCellar, onClose }) {
   const handleFile = (e) => {
     const file = e.target.files[0];
     if (!file) return;
+    if (isHeic(file)) { setError(HEIC_MSG); setStep("review"); e.target.value = ""; return; }
     const reader = new FileReader();
-    reader.onload = async () => { const compressed = await compressImage(reader.result); setImage(compressed); readLabel(compressed); };
+    reader.onload = async () => {
+      try { const compressed = await compressImage(reader.result); setImage(compressed); readLabel(compressed); }
+      catch (err) { setError(err.message); setStep("review"); }
+    };
     reader.readAsDataURL(file);
   };
 
