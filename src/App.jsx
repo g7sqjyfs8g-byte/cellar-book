@@ -83,6 +83,16 @@ async function searchWineImage(name, producer) {
   return null;
 }
 
+async function lookupHalliday(name, producer, vintage) {
+  const wine = [producer, name, vintage].filter(Boolean).join(" ");
+  const raw = await callClaude({
+    maxTokens: 80,
+    messages: [{ role: "user", content: `What is the James Halliday Wine Companion score (out of 100) for: ${wine}?\nReturn ONLY valid JSON: {"score":95} or {"score":null} if you are not confident. Do not guess.` }],
+  });
+  const parsed = JSON.parse(raw.replace(/```json|```/g, "").trim());
+  return typeof parsed.score === "number" ? parsed.score : null;
+}
+
 async function lookupBarcode(barcode) {
   const res = await fetch(`https://world.openfoodfacts.org/product/${barcode}.json`);
   const data = await res.json();
@@ -262,6 +272,7 @@ const fromSheetTasting = (row) => ({
     : row.buyAgain === false || row.buyAgain === "FALSE" || row.buyAgain === "false" ? false
     : null,
   label: row.label || null,
+  hallidayRating: row.hallidayRating !== null && row.hallidayRating !== "" ? Number(row.hallidayRating) : null,
 });
 
 const fromSheetCellar = (row) => ({
@@ -271,6 +282,7 @@ const fromSheetCellar = (row) => ({
   drinkFrom: row.drinkFrom ? Number(row.drinkFrom) : null,
   drinkBy: row.drinkBy ? Number(row.drinkBy) : null,
   label: row.label || null,
+  hallidayRating: row.hallidayRating !== null && row.hallidayRating !== "" ? Number(row.hallidayRating) : null,
 });
 
 // ─── Tiny components ────────────────────────────────────────────────
@@ -615,12 +627,14 @@ function BarcodeScanner({ onDetected, onClose }) {
 
 // ─── Tasting Detail Modal ─────────────────────────────────────────
 
-function TastingDetail({ wine, onEdit, onDelete, onClose, onFindLabel }) {
+function TastingDetail({ wine, onEdit, onDelete, onClose, onFindLabel, onFindHalliday }) {
   const both = wine.jmRating != null && wine.nickyRating != null;
   const avg = both ? ((wine.jmRating + wine.nickyRating) / 2).toFixed(1) : null;
   const [sc, tc] = styleColors[wine.style] || ["#222", "#888"];
   const [finding, setFinding] = useState(false);
   const [findMsg, setFindMsg] = useState("");
+  const [findingH, setFindingH] = useState(false);
+  const [hallidayMsg, setHallidayMsg] = useState("");
 
   const handleFindLabel = async () => {
     setFinding(true);
@@ -628,6 +642,14 @@ function TastingDetail({ wine, onEdit, onDelete, onClose, onFindLabel }) {
     const found = await onFindLabel(wine);
     setFinding(false);
     setFindMsg(found ? "✓ Label image saved." : "No image found — try uploading one manually.");
+  };
+
+  const handleFindHalliday = async () => {
+    setFindingH(true);
+    setHallidayMsg("");
+    const score = await onFindHalliday(wine);
+    setFindingH(false);
+    setHallidayMsg(score != null ? `✓ Found: ${score}/100` : "Not found in Claude's knowledge — add manually.");
   };
 
   return (
@@ -667,13 +689,29 @@ function TastingDetail({ wine, onEdit, onDelete, onClose, onFindLabel }) {
         </div>
 
         {/* Ratings */}
-        <div style={{ display: "flex", gap: "24px" }}>
+        <div style={{ display: "flex", gap: "24px", flexWrap: "wrap", alignItems: "flex-end" }}>
           {[["JM", wine.jmRating, gold], ["NICKY", wine.nickyRating, blush], both && ["AVG", avg, "#f0ebe0"]].filter(Boolean).map(([lbl, val, col]) => (
             <div key={lbl} style={{ textAlign: "center" }}>
               <div style={{ fontSize: "9px", color: "#555", fontFamily: "monospace", letterSpacing: "1px", marginBottom: "2px" }}>{lbl}</div>
               <div style={{ fontFamily: "'Playfair Display', serif", fontSize: "32px", fontWeight: 700, color: col }}>{val ?? "—"}</div>
             </div>
           ))}
+          <div style={{ textAlign: "center" }}>
+            <div style={{ fontSize: "9px", color: "#555", fontFamily: "monospace", letterSpacing: "1px", marginBottom: "2px" }}>HALLIDAY</div>
+            {wine.hallidayRating != null ? (
+              <div style={{ fontFamily: "'Playfair Display', serif", fontSize: "32px", fontWeight: 700, color: "#e8562a" }}>{wine.hallidayRating}</div>
+            ) : (
+              <div style={{ display: "flex", flexDirection: "column", gap: "4px", alignItems: "center" }}>
+                <div style={{ fontFamily: "'Playfair Display', serif", fontSize: "32px", fontWeight: 700, color: "#333" }}>—</div>
+                {onFindHalliday && (
+                  <Btn onClick={handleFindHalliday} disabled={findingH} style={{ fontSize: "10px", padding: "3px 8px" }}>
+                    {findingH ? "Looking…" : "Look up"}
+                  </Btn>
+                )}
+                {hallidayMsg && <div style={{ fontSize: "10px", fontFamily: "monospace", color: hallidayMsg.startsWith("✓") ? "#e8562a" : "#555", maxWidth: "80px", textAlign: "center" }}>{hallidayMsg}</div>}
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Notes */}
@@ -748,13 +786,19 @@ function TastingCard({ wine, onView }) {
         {wine.grape}{wine.region ? ` · ${wine.region}` : ""}
       </div>
 
-      <div style={{ display: "flex", gap: "20px", marginBottom: "14px" }}>
+      <div style={{ display: "flex", gap: "20px", marginBottom: "14px", flexWrap: "wrap" }}>
         {[["JM", wine.jmRating, gold], ["NICKY", wine.nickyRating, blush], both && ["AVG", avg, "#f0ebe0"]].filter(Boolean).map(([lbl, val, col]) => (
           <div key={lbl}>
             <div style={{ fontSize: "9px", color: "#555", fontFamily: "monospace", letterSpacing: "1px", marginBottom: "2px" }}>{lbl}</div>
             <div style={{ fontFamily: "'Playfair Display', serif", fontSize: "26px", fontWeight: 700, color: col }}>{val ?? "—"}</div>
           </div>
         ))}
+        {wine.hallidayRating != null && (
+          <div>
+            <div style={{ fontSize: "9px", color: "#555", fontFamily: "monospace", letterSpacing: "1px", marginBottom: "2px" }}>HALLIDAY</div>
+            <div style={{ fontFamily: "'Playfair Display', serif", fontSize: "26px", fontWeight: 700, color: "#e8562a" }}>{wine.hallidayRating}</div>
+          </div>
+        )}
       </div>
 
       {wine.notes && (
@@ -765,6 +809,7 @@ function TastingCard({ wine, onView }) {
 
       <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
         {wine.buyAgain && <Badge label="✓ Buy Again" color="#0e2a1a" text="#4caf79" />}
+        {wine.hallidayRating != null && <Badge label={`H·${wine.hallidayRating}`} color="#2a0a06" text="#e8562a" />}
       </div>
     </div>
   );
@@ -772,11 +817,21 @@ function TastingCard({ wine, onView }) {
 
 // ─── Cellar Detail Modal ──────────────────────────────────────────
 
-function CellarDetail({ wine, onEdit, onDelete, onQty, onClose }) {
+function CellarDetail({ wine, onEdit, onDelete, onQty, onClose, onFindHalliday }) {
   const [sc, tc] = styleColors[wine.style] || ["#222", "#888"];
   const currentYear = new Date().getFullYear();
   const readyNow = wine.drinkFrom ? currentYear >= wine.drinkFrom : true;
   const overdue = wine.drinkBy ? currentYear > wine.drinkBy : false;
+  const [findingH, setFindingH] = useState(false);
+  const [hallidayMsg, setHallidayMsg] = useState("");
+
+  const handleFindHalliday = async () => {
+    setFindingH(true);
+    setHallidayMsg("");
+    const score = await onFindHalliday(wine);
+    setFindingH(false);
+    setHallidayMsg(score != null ? `✓ Found: ${score}/100` : "Not found — add manually.");
+  };
 
   return (
     <Modal title="" onClose={onClose}>
@@ -816,6 +871,24 @@ function CellarDetail({ wine, onEdit, onDelete, onQty, onClose }) {
             <div style={{ fontFamily: "'Playfair Display', serif", fontSize: "28px", fontWeight: 700, color: gold, minWidth: "32px", textAlign: "center" }}>{wine.quantity}</div>
             <Btn onClick={() => onQty(wine.id, 1)} style={{ padding: "5px 14px", fontSize: "18px" }}>+</Btn>
           </div>
+        </div>
+
+        {/* Halliday rating */}
+        <div style={{ background: "#131313", borderRadius: "10px", padding: "12px 16px", display: "flex", alignItems: "center", gap: "12px" }}>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: "9px", color: "#555", fontFamily: "monospace", letterSpacing: "1px", marginBottom: "4px", textTransform: "uppercase" }}>James Halliday</div>
+            {wine.hallidayRating != null ? (
+              <div style={{ fontFamily: "'Playfair Display', serif", fontSize: "28px", fontWeight: 700, color: "#e8562a" }}>{wine.hallidayRating}<span style={{ fontSize: "13px", color: "#555", marginLeft: "4px" }}>/100</span></div>
+            ) : (
+              <div style={{ fontSize: "13px", color: "#444", fontFamily: "monospace" }}>Not rated</div>
+            )}
+            {hallidayMsg && <div style={{ fontSize: "11px", fontFamily: "monospace", color: hallidayMsg.startsWith("✓") ? "#e8562a" : "#555", marginTop: "4px" }}>{hallidayMsg}</div>}
+          </div>
+          {onFindHalliday && (
+            <Btn onClick={handleFindHalliday} disabled={findingH} style={{ fontSize: "11px", padding: "6px 12px" }}>
+              {findingH ? "Looking…" : wine.hallidayRating != null ? "Refresh" : "Look up"}
+            </Btn>
+          )}
         </div>
 
         {/* Details grid */}
@@ -883,10 +956,11 @@ function CellarRow({ wine, onView, onQty }) {
         </div>
       </div>
 
-      <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
+      <div style={{ display: "flex", gap: "6px", alignItems: "center", flexWrap: "wrap" }}>
         {overdue && <Badge label="Drink now!" color="#3a1010" text="#e05050" />}
         {!overdue && readyNow && wine.drinkBy && <Badge label="Ready" color="#0e2a1a" text="#4caf79" />}
         {!readyNow && <Badge label={`From ${wine.drinkFrom}`} color="#1a1a2a" text="#6a8ad8" />}
+        {wine.hallidayRating != null && <Badge label={`H·${wine.hallidayRating}`} color="#2a0a06" text="#e8562a" />}
       </div>
 
       <div style={{ display: "flex", alignItems: "center", gap: "8px" }} onClick={e => e.stopPropagation()}>
@@ -903,14 +977,15 @@ function CellarRow({ wine, onView, onQty }) {
 function TastingForm({ wine, onSave, onCancel }) {
   const blank = {
     name: "", producer: "", vintage: "", region: "", country: "France",
-    grape: "", style: "White", jmRating: "", nickyRating: "",
+    grape: "", style: "White", jmRating: "", nickyRating: "", hallidayRating: "",
     notes: "", pairing: "", price: "", location: "",
     buyAgain: false, date: new Date().toISOString().split("T")[0], label: null,
   };
-  const [form, setForm] = useState(wine ? { ...wine, vintage: wine.vintage ?? "", jmRating: wine.jmRating ?? "", nickyRating: wine.nickyRating ?? "" } : blank);
+  const [form, setForm] = useState(wine ? { ...wine, vintage: wine.vintage ?? "", jmRating: wine.jmRating ?? "", nickyRating: wine.nickyRating ?? "", hallidayRating: wine.hallidayRating ?? "" } : blank);
   const [aiLoading, setAiLoading] = useState(false);
   const [showScanner, setShowScanner] = useState(false);
   const [barcodeMsg, setBarcodeMsg] = useState("");
+  const [hallidayLoading, setHallidayLoading] = useState(false);
   const fileRef = useRef();
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
 
@@ -977,6 +1052,7 @@ function TastingForm({ wine, onSave, onCancel }) {
       vintage: form.vintage ? parseInt(form.vintage) : null,
       jmRating: form.jmRating !== "" ? parseFloat(form.jmRating) : null,
       nickyRating: form.nickyRating !== "" ? parseFloat(form.nickyRating) : null,
+      hallidayRating: form.hallidayRating !== "" ? parseInt(form.hallidayRating) : null,
     });
   };
 
@@ -1018,6 +1094,12 @@ function TastingForm({ wine, onSave, onCancel }) {
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
           <Input label="JM Rating /10" type="number" min="0" max="10" step="0.5" value={form.jmRating} onChange={e => set("jmRating", e.target.value)} placeholder="0–10" />
           <Input label="Nicky Rating /10" type="number" min="0" max="10" step="0.5" value={form.nickyRating} onChange={e => set("nickyRating", e.target.value)} placeholder="0–10" />
+          <div style={{ display: "flex", gap: "6px", alignItems: "flex-end" }}>
+            <div style={{ flex: 1 }}><Input label="Halliday /100" type="number" min="0" max="100" step="1" value={form.hallidayRating} onChange={e => set("hallidayRating", e.target.value)} placeholder="e.g. 95" /></div>
+            <Btn onClick={async () => { setHallidayLoading(true); const s = await lookupHalliday(form.name, form.producer, form.vintage); if (s != null) set("hallidayRating", String(s)); setHallidayLoading(false); }} disabled={hallidayLoading || !form.name} style={{ marginBottom: "0", padding: "9px 10px", fontSize: "11px", whiteSpace: "nowrap" }}>
+              {hallidayLoading ? "…" : "Look up"}
+            </Btn>
+          </div>
         </div>
 
         <Textarea label="Tasting Notes" value={form.notes} onChange={e => set("notes", e.target.value)} placeholder="What did you taste? What stood out?" />
@@ -1049,7 +1131,7 @@ function CellarForm({ wine, onSave, onCancel }) {
   const blank = {
     name: "", producer: "", vintage: "", region: "", country: "Australia",
     grape: "", style: "Red", quantity: 1, drinkFrom: "", drinkBy: "",
-    price: "", location: "John's Cellar", notes: "",
+    price: "", location: "John's Cellar", notes: "", hallidayRating: "",
     dateAdded: new Date().toISOString().split("T")[0], label: null,
   };
   const [form, setForm] = useState(wine ? {
@@ -1057,10 +1139,12 @@ function CellarForm({ wine, onSave, onCancel }) {
     vintage: wine.vintage ?? "",
     drinkFrom: wine.drinkFrom ?? "",
     drinkBy: wine.drinkBy ?? "",
+    hallidayRating: wine.hallidayRating ?? "",
   } : blank);
   const [aiLoading, setAiLoading] = useState(false);
   const [showScanner, setShowScanner] = useState(false);
   const [barcodeMsg, setBarcodeMsg] = useState("");
+  const [hallidayLoading, setHallidayLoading] = useState(false);
   const fileRef = useRef();
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
 
@@ -1128,6 +1212,7 @@ function CellarForm({ wine, onSave, onCancel }) {
       drinkFrom: form.drinkFrom ? parseInt(form.drinkFrom) : null,
       drinkBy: form.drinkBy ? parseInt(form.drinkBy) : null,
       quantity: parseInt(form.quantity) || 1,
+      hallidayRating: form.hallidayRating !== "" ? parseInt(form.hallidayRating) : null,
     });
   };
 
@@ -1164,6 +1249,12 @@ function CellarForm({ wine, onSave, onCancel }) {
           <Input label="Drink By (year)" type="number" value={form.drinkBy} onChange={e => set("drinkBy", e.target.value)} placeholder="e.g. 2032" />
           <Input label="Price Paid" value={form.price} onChange={e => set("price", e.target.value)} placeholder="e.g. $120" />
           <Input label="Storage Location" value={form.location} onChange={e => set("location", e.target.value)} />
+          <div style={{ display: "flex", gap: "6px", alignItems: "flex-end" }}>
+            <div style={{ flex: 1 }}><Input label="Halliday /100" type="number" min="0" max="100" step="1" value={form.hallidayRating} onChange={e => set("hallidayRating", e.target.value)} placeholder="e.g. 95" /></div>
+            <Btn onClick={async () => { setHallidayLoading(true); const s = await lookupHalliday(form.name, form.producer, form.vintage); if (s != null) set("hallidayRating", String(s)); setHallidayLoading(false); }} disabled={hallidayLoading || !form.name} style={{ padding: "9px 10px", fontSize: "11px", whiteSpace: "nowrap" }}>
+              {hallidayLoading ? "…" : "Look up"}
+            </Btn>
+          </div>
         </div>
 
         <Textarea label="Notes" value={form.notes} onChange={e => set("notes", e.target.value)} />
@@ -2322,6 +2413,16 @@ export default function App() {
             syncWrap(() => sheetsUpsert("tastings", { ...updated, label: thumbnail }));
             return true;
           }}
+          onFindHalliday={async (w) => {
+            const score = await lookupHalliday(w.name, w.producer, w.vintage);
+            if (score == null) return null;
+            const updated = { ...w, hallidayRating: score };
+            setTastings(ts => ts.map(t => t.id === w.id ? updated : t));
+            setViewTasting(updated);
+            const thumbnail = updated.label ? await compressForSheet(updated.label) : null;
+            syncWrap(() => sheetsUpsert("tastings", { ...updated, label: thumbnail }));
+            return score;
+          }}
         />
       )}
       {showTastingForm && (
@@ -2334,6 +2435,16 @@ export default function App() {
           onEdit={w => { setViewCellar(null); setEditCellar(w); setShowCellarForm(true); }}
           onDelete={id => { setViewCellar(null); deleteCellar(id); }}
           onQty={(id, delta) => { adjustQty(id, delta); setViewCellar(c => ({ ...c, quantity: Math.max(0, (c.quantity || 0) + delta) })); }}
+          onFindHalliday={async (w) => {
+            const score = await lookupHalliday(w.name, w.producer, w.vintage);
+            if (score == null) return null;
+            const updated = { ...w, hallidayRating: score };
+            setCellar(cs => cs.map(c => c.id === w.id ? updated : c));
+            setViewCellar(updated);
+            const thumbnail = updated.label ? await compressForSheet(updated.label) : null;
+            syncWrap(() => sheetsUpsert("cellar", { ...updated, label: thumbnail }));
+            return score;
+          }}
         />
       )}
       {showCellarForm && (
