@@ -1312,7 +1312,7 @@ function TabBar({ active, onChange }) {
 
 // ─── Stats ────────────────────────────────────────────────────────
 
-function Stats({ tastings, cellar }) {
+function Stats({ tastings, cellar, bulkH, onPopulateHalliday, onResetBulk }) {
   const rated = tastings.filter(w => w.jmRating != null || w.nickyRating != null);
   const avgJM = rated.filter(w => w.jmRating).length
     ? (rated.filter(w => w.jmRating).reduce((s, w) => s + w.jmRating, 0) / rated.filter(w => w.jmRating).length).toFixed(1)
@@ -1396,6 +1396,39 @@ function Stats({ tastings, cellar }) {
           ))}
         </div>
       )}
+
+      {/* Halliday bulk populate */}
+      <div style={{ background: "#1a1a1a", border: "1px solid #272727", borderRadius: "12px", padding: "20px" }}>
+        <div style={{ fontFamily: "'Playfair Display', serif", fontSize: "18px", color: "#f0ebe0", marginBottom: "4px" }}>James Halliday Scores</div>
+        <div style={{ fontSize: "11px", color: "#555", fontFamily: "monospace", marginBottom: "14px" }}>
+          {[...tastings, ...cellar].filter(w => w.hallidayRating != null).length} of {tastings.length + cellar.length} wines rated
+        </div>
+
+        {!bulkH ? (
+          <Btn variant="outline" onClick={onPopulateHalliday}>
+            Populate all missing scores
+          </Btn>
+        ) : (
+          <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+              <div style={{ flex: 1, height: "6px", background: "#2a2a2a", borderRadius: "3px", overflow: "hidden" }}>
+                <div style={{ height: "100%", background: "#e8562a", borderRadius: "3px", width: `${bulkH.total ? (bulkH.done / bulkH.total) * 100 : 100}%`, transition: "width 0.3s" }} />
+              </div>
+              <div style={{ fontSize: "11px", fontFamily: "monospace", color: "#666", whiteSpace: "nowrap" }}>
+                {bulkH.done}/{bulkH.total}
+              </div>
+            </div>
+            <div style={{ maxHeight: "220px", overflowY: "auto", display: "flex", flexDirection: "column", gap: "3px" }}>
+              {bulkH.log.map((line, i) => (
+                <div key={i} style={{ fontSize: "11px", fontFamily: "monospace", color: line.startsWith("✓") ? "#e8562a" : "#444" }}>{line}</div>
+              ))}
+            </div>
+            {bulkH.done === bulkH.total && (
+              <Btn onClick={onResetBulk} style={{ alignSelf: "flex-start" }}>Done</Btn>
+            )}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -2269,6 +2302,41 @@ export default function App() {
   const avgNicky = tastings.filter(w => w.nickyRating).length
     ? (tastings.filter(w => w.nickyRating).reduce((s, w) => s + w.nickyRating, 0) / tastings.filter(w => w.nickyRating).length).toFixed(1) : "—";
 
+  const [bulkH, setBulkH] = useState(null); // null | { done, total, log[] }
+
+  const populateAllHalliday = async () => {
+    const missing = [
+      ...tastings.filter(w => w.hallidayRating == null).map(w => ({ ...w, _sheet: "tastings" })),
+      ...cellar.filter(w => w.hallidayRating == null).map(w => ({ ...w, _sheet: "cellar" })),
+    ];
+    if (!missing.length) { setBulkH({ done: 0, total: 0, log: ["All wines already have Halliday scores."] }); return; }
+    setBulkH({ done: 0, total: missing.length, log: [] });
+
+    for (let i = 0; i < missing.length; i++) {
+      const { _sheet, ...w } = missing[i];
+      const score = await lookupHalliday(w.name, w.producer, w.vintage);
+      const entry = score != null
+        ? `✓ ${w.producer ? w.producer + " " : ""}${w.name}${w.vintage ? " " + w.vintage : ""}: ${score}`
+        : `— ${w.producer ? w.producer + " " : ""}${w.name}${w.vintage ? " " + w.vintage : ""}: not found`;
+
+      if (score != null) {
+        const updated = { ...w, hallidayRating: score };
+        if (_sheet === "tastings") {
+          setTastings(ts => ts.map(t => t.id === w.id ? updated : t));
+          const thumb = updated.label ? await compressForSheet(updated.label) : null;
+          sheetsUpsert("tastings", { ...updated, label: thumb }).catch(console.error);
+        } else {
+          setCellar(cs => cs.map(c => c.id === w.id ? updated : c));
+          const thumb = updated.label ? await compressForSheet(updated.label) : null;
+          sheetsUpsert("cellar", { ...updated, label: thumb }).catch(console.error);
+        }
+      }
+
+      setBulkH(prev => ({ ...prev, done: i + 1, log: [...prev.log, entry] }));
+      if (i < missing.length - 1) await new Promise(r => setTimeout(r, 400));
+    }
+  };
+
   if (!loaded) return (
     <div style={{ minHeight: "100vh", background: "#111", display: "flex", alignItems: "center", justifyContent: "center" }}>
       <div style={{ color: "#555", fontFamily: "monospace", fontSize: "13px" }}>Loading your cellar…</div>
@@ -2365,7 +2433,7 @@ export default function App() {
       )}
 
       {/* Stats tab */}
-      {tab === "stats" && <Stats tastings={tastings} cellar={cellar} />}
+      {tab === "stats" && <Stats tastings={tastings} cellar={cellar} bulkH={bulkH} onPopulateHalliday={populateAllHalliday} onResetBulk={() => setBulkH(null)} />}
 
       {/* Sommelier tab */}
       {tab === "sommelier" && <Sommelier tastings={tastings} />}
