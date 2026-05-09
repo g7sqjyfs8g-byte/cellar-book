@@ -66,6 +66,28 @@ function compressForSheet(dataUrl) {
   });
 }
 
+async function lookupBarcode(barcode) {
+  const res = await fetch(`https://world.openfoodfacts.org/product/${barcode}.json`);
+  const data = await res.json();
+  return data.status === 1 ? data.product : null;
+}
+
+async function parseWineFromProduct(product) {
+  const info = [
+    product.product_name && `Product: ${product.product_name}`,
+    product.brands       && `Brand: ${product.brands}`,
+    product.categories   && `Categories: ${product.categories}`,
+    product.countries    && `Country: ${product.countries}`,
+    product.quantity     && `Quantity: ${product.quantity}`,
+  ].filter(Boolean).join("\n");
+
+  const raw = await callClaude({
+    maxTokens: 300,
+    messages: [{ role: "user", content: `Extract wine details from this product listing:\n${info}\n\nReturn ONLY valid JSON (no markdown):\n{"name":"wine name without vintage","producer":"winery/producer","vintage":2024,"region":"region","country":"country","grape":"grape or blend","style":"Red|White|Rosé|Sparkling|Dessert|Orange"}\nUse null for unknown fields.` }],
+  });
+  return JSON.parse(raw.replace(/```json|```/g, "").trim());
+}
+
 async function callClaude({ messages, system, maxTokens = 1024 }) {
   // Log image details before sending to help diagnose API errors
   messages.forEach((m, mi) => {
@@ -489,6 +511,91 @@ function FindPrices({ wine }) {
   );
 }
 
+// ─── Barcode Scanner ──────────────────────────────────────────────
+
+function BarcodeScanner({ onDetected, onClose }) {
+  const videoRef = useRef(null);
+  const controlsRef = useRef(null);
+  const [status, setStatus] = useState("starting"); // starting | scanning | found | error
+  const [errMsg, setErrMsg] = useState("");
+
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      try {
+        const { BrowserMultiFormatReader } = await import("@zxing/browser");
+        const reader = new BrowserMultiFormatReader();
+        if (!mounted) return;
+        setStatus("scanning");
+        const controls = await reader.decodeFromVideoDevice(
+          undefined,
+          videoRef.current,
+          (result, _err, ctl) => {
+            if (!mounted || !result) return;
+            mounted = false;
+            setStatus("found");
+            ctl.stop();
+            if (videoRef.current?.srcObject) {
+              videoRef.current.srcObject.getTracks().forEach(t => t.stop());
+            }
+            setTimeout(() => onDetected(result.getText()), 350);
+          }
+        );
+        controlsRef.current = controls;
+      } catch (e) {
+        if (mounted) { setStatus("error"); setErrMsg(e.message); }
+      }
+    })();
+    return () => {
+      mounted = false;
+      try { controlsRef.current?.stop(); } catch {}
+      if (videoRef.current?.srcObject) {
+        videoRef.current.srcObject.getTracks().forEach(t => t.stop());
+      }
+    };
+  }, []);
+
+  return (
+    <div style={{
+      position: "fixed", inset: 0, background: "rgba(0,0,0,0.97)",
+      zIndex: 1100, display: "flex", flexDirection: "column",
+      alignItems: "center", justifyContent: "center", padding: "20px",
+    }}>
+      <div style={{ width: "100%", maxWidth: "480px", display: "flex", flexDirection: "column", gap: "16px" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <div style={{ fontFamily: "'Playfair Display', serif", fontSize: "20px", color: "#f0ebe0" }}>Scan barcode</div>
+          <button onClick={onClose} style={{ background: "none", border: "none", color: "#666", fontSize: "22px", cursor: "pointer", lineHeight: 1 }}>✕</button>
+        </div>
+
+        {status === "error" ? (
+          <div style={{ background: "#1c1010", border: "1px solid #3a1010", borderRadius: "10px", padding: "20px", color: "#e05050", fontFamily: "monospace", fontSize: "12px", textAlign: "center" }}>
+            Camera unavailable.<br /><span style={{ color: "#666" }}>{errMsg}</span>
+          </div>
+        ) : (
+          <div style={{ position: "relative", borderRadius: "12px", overflow: "hidden", background: "#000", aspectRatio: "4/3" }}>
+            <video ref={videoRef} muted playsInline style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
+            {/* Targeting guide */}
+            <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", pointerEvents: "none" }}>
+              <div style={{ width: "72%", height: "22%", border: `2px solid ${gold}`, borderRadius: "6px", opacity: status === "found" ? 1 : 0.75 }}>
+                <div style={{ position: "absolute", top: 0, left: 0, width: "14px", height: "14px", borderTop: `2px solid ${gold}`, borderLeft: `2px solid ${gold}`, borderRadius: "2px 0 0 0" }} />
+                <div style={{ position: "absolute", top: 0, right: 0, width: "14px", height: "14px", borderTop: `2px solid ${gold}`, borderRight: `2px solid ${gold}`, borderRadius: "0 2px 0 0" }} />
+                <div style={{ position: "absolute", bottom: 0, left: 0, width: "14px", height: "14px", borderBottom: `2px solid ${gold}`, borderLeft: `2px solid ${gold}`, borderRadius: "0 0 0 2px" }} />
+                <div style={{ position: "absolute", bottom: 0, right: 0, width: "14px", height: "14px", borderBottom: `2px solid ${gold}`, borderRight: `2px solid ${gold}`, borderRadius: "0 0 2px 0" }} />
+              </div>
+            </div>
+          </div>
+        )}
+
+        <div style={{ textAlign: "center", fontFamily: "monospace", fontSize: "12px", color: status === "found" ? "#4caf79" : "#555" }}>
+          {status === "starting" && "Starting camera…"}
+          {status === "scanning" && "Point the barcode at the box above"}
+          {status === "found"    && "✓ Barcode detected — looking up wine…"}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Tasting Detail Modal ─────────────────────────────────────────
 
 function TastingDetail({ wine, onEdit, onDelete, onClose }) {
@@ -767,6 +874,8 @@ function TastingForm({ wine, onSave, onCancel }) {
   };
   const [form, setForm] = useState(wine ? { ...wine, vintage: wine.vintage ?? "", jmRating: wine.jmRating ?? "", nickyRating: wine.nickyRating ?? "" } : blank);
   const [aiLoading, setAiLoading] = useState(false);
+  const [showScanner, setShowScanner] = useState(false);
+  const [barcodeMsg, setBarcodeMsg] = useState("");
   const fileRef = useRef();
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
 
@@ -804,6 +913,27 @@ function TastingForm({ wine, onSave, onCancel }) {
     setAiLoading(false);
   };
 
+  const handleBarcode = async (code) => {
+    setShowScanner(false);
+    setBarcodeMsg("Looking up wine…");
+    try {
+      const product = await lookupBarcode(code);
+      if (!product) {
+        setBarcodeMsg(`Barcode ${code} not found in database. Fill in details manually.`);
+        return;
+      }
+      const parsed = await parseWineFromProduct(product);
+      setForm(f => ({
+        ...f,
+        ...Object.fromEntries(Object.entries(parsed).filter(([, v]) => v != null)),
+        vintage: parsed.vintage ? String(parsed.vintage) : f.vintage,
+      }));
+      setBarcodeMsg("✓ Wine details filled from barcode.");
+    } catch (e) {
+      setBarcodeMsg(`Lookup failed: ${e.message}`);
+    }
+  };
+
   const handleSave = () => {
     if (!form.name.trim()) return alert("Wine name is required.");
     onSave({
@@ -817,12 +947,14 @@ function TastingForm({ wine, onSave, onCancel }) {
 
   return (
     <Modal title={wine ? "Edit tasting" : "Log a tasting"} onClose={onCancel}>
+      {showScanner && <BarcodeScanner onDetected={handleBarcode} onClose={() => setShowScanner(false)} />}
       <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
-        {/* Label upload */}
+        {/* Label photo + barcode */}
         <div>
           <div style={{ fontSize: "10px", color: "#666", fontFamily: "monospace", letterSpacing: "1px", marginBottom: "6px", textTransform: "uppercase" }}>Label photo</div>
           <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
             <Btn onClick={() => fileRef.current.click()} style={{ background: "#242424", border: "1px dashed #444", color: "#aaa" }}>📷 Upload</Btn>
+            <Btn onClick={() => { setBarcodeMsg(""); setShowScanner(true); }} style={{ background: "#242424", border: "1px dashed #444", color: "#aaa" }}>🔍 Scan barcode</Btn>
             {form.label && (
               <Btn variant="outline" onClick={handleAI} disabled={aiLoading}>
                 {aiLoading ? "Reading…" : "✨ Auto-fill from label"}
@@ -830,6 +962,7 @@ function TastingForm({ wine, onSave, onCancel }) {
             )}
           </div>
           <input ref={fileRef} type="file" accept="image/*" onChange={handleImage} style={{ display: "none" }} />
+          {barcodeMsg && <div style={{ marginTop: "8px", fontSize: "11px", fontFamily: "monospace", color: barcodeMsg.startsWith("✓") ? "#4caf79" : "#888" }}>{barcodeMsg}</div>}
           {form.label && <img src={form.label} alt="" style={{ marginTop: "10px", height: "100px", borderRadius: "8px", objectFit: "contain", border: "1px solid #333" }} />}
         </div>
 
@@ -891,6 +1024,8 @@ function CellarForm({ wine, onSave, onCancel }) {
     drinkBy: wine.drinkBy ?? "",
   } : blank);
   const [aiLoading, setAiLoading] = useState(false);
+  const [showScanner, setShowScanner] = useState(false);
+  const [barcodeMsg, setBarcodeMsg] = useState("");
   const fileRef = useRef();
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
 
@@ -928,6 +1063,27 @@ function CellarForm({ wine, onSave, onCancel }) {
     setAiLoading(false);
   };
 
+  const handleBarcode = async (code) => {
+    setShowScanner(false);
+    setBarcodeMsg("Looking up wine…");
+    try {
+      const product = await lookupBarcode(code);
+      if (!product) {
+        setBarcodeMsg(`Barcode ${code} not found in database. Fill in details manually.`);
+        return;
+      }
+      const parsed = await parseWineFromProduct(product);
+      setForm(f => ({
+        ...f,
+        ...Object.fromEntries(Object.entries(parsed).filter(([, v]) => v != null)),
+        vintage: parsed.vintage ? String(parsed.vintage) : f.vintage,
+      }));
+      setBarcodeMsg("✓ Wine details filled from barcode.");
+    } catch (e) {
+      setBarcodeMsg(`Lookup failed: ${e.message}`);
+    }
+  };
+
   const handleSave = () => {
     if (!form.name.trim()) return alert("Wine name is required.");
     onSave({
@@ -942,14 +1098,17 @@ function CellarForm({ wine, onSave, onCancel }) {
 
   return (
     <Modal title={wine ? "Edit cellar entry" : "Add to cellar"} onClose={onCancel}>
+      {showScanner && <BarcodeScanner onDetected={handleBarcode} onClose={() => setShowScanner(false)} />}
       <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
         <div>
           <div style={{ fontSize: "10px", color: "#666", fontFamily: "monospace", letterSpacing: "1px", marginBottom: "6px", textTransform: "uppercase" }}>Label photo (optional)</div>
           <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
             <Btn onClick={() => fileRef.current.click()} style={{ background: "#242424", border: "1px dashed #444", color: "#aaa" }}>📷 Upload</Btn>
+            <Btn onClick={() => { setBarcodeMsg(""); setShowScanner(true); }} style={{ background: "#242424", border: "1px dashed #444", color: "#aaa" }}>🔍 Scan barcode</Btn>
             {form.label && <Btn variant="outline" onClick={handleAI} disabled={aiLoading}>{aiLoading ? "Reading…" : "✨ Auto-fill from label"}</Btn>}
           </div>
           <input ref={fileRef} type="file" accept="image/*" onChange={handleImage} style={{ display: "none" }} />
+          {barcodeMsg && <div style={{ marginTop: "8px", fontSize: "11px", fontFamily: "monospace", color: barcodeMsg.startsWith("✓") ? "#4caf79" : "#888" }}>{barcodeMsg}</div>}
           {form.label && <img src={form.label} alt="" style={{ marginTop: "10px", height: "90px", borderRadius: "8px", objectFit: "contain", border: "1px solid #333" }} />}
         </div>
 
