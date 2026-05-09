@@ -1435,7 +1435,7 @@ function Stats({ tastings, cellar, bulkH, onPopulateHalliday, onResetBulk }) {
 
 // ─── Sommelier ────────────────────────────────────────────────────
 
-function Sommelier({ tastings }) {
+function Sommelier({ tastings, cellar }) {
   const [mode, setMode] = useState("ask");
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState("");
@@ -1444,13 +1444,25 @@ function Sommelier({ tastings }) {
   const [wineListImg, setWineListImg] = useState(null);
   const [loading, setLoading] = useState(false);
   const [bottleImg, setBottleImg] = useState(null);
+  const [recipeImg, setRecipeImg] = useState(null);
+  const [priceRangeEnabled, setPriceRangeEnabled] = useState(false);
+  const [priceMin, setPriceMin] = useState("");
+  const [priceMax, setPriceMax] = useState("");
   const chatRef = useRef();
   const fileRef = useRef();
   const bottleFileRef = useRef();
+  const recipeFileRef = useRef();
 
   useEffect(() => {
     if (chatRef.current) chatRef.current.scrollTop = chatRef.current.scrollHeight;
   }, [messages, loading]);
+
+  const cellarSummary = () => {
+    if (!cellar || !cellar.length) return "";
+    return cellar
+      .map(w => [w.producer, w.name, w.vintage, `(${[w.grape, w.style].filter(Boolean).join(", ")})`].filter(Boolean).join(" "))
+      .join("\n");
+  };
 
   const preferenceProfile = () => {
     if (!tastings.length) return "";
@@ -1478,7 +1490,16 @@ function Sommelier({ tastings }) {
   const system = (m) => {
     const prefs = preferenceProfile();
     const base = `You are an expert sommelier with deep knowledge of wine regions, grapes, vintages, and food pairing. You're advising JM and Nicky, a couple who love wine.${prefs ? `\n\nTheir wine profile:\n${prefs}` : ""}\n\nBe specific, concise, and conversational. Use bullet points or numbered lists where helpful. Highlight producer names and wine names in bold.`;
-    if (m === "meal") return base + "\n\nFor meal pairing: recommend 2–3 specific wines (producer, grape, region, approx price), explain why each works with the dish, and note which best suits their preferences.";
+    if (m === "meal") {
+      const cellarStr = cellarSummary();
+      const priceStr = priceRangeEnabled
+        ? ` When recommending wines to purchase, only suggest wines priced between $${priceMin || "0"} and $${priceMax || "any amount"}.`
+        : "";
+      const cellarPart = cellarStr
+        ? `\n\nThey currently have these wines in their cellar:\n${cellarStr}\n\nFirst check if any of their cellar wines pair well with the dish — if so, highlight them under a "## From Your Cellar" heading. Then under "## Wines to Buy" recommend 2–3 wines to purchase (producer, grape, region, approx price) with pairing explanations.${priceStr}`
+        : `\n\nRecommend 2–3 specific wines (producer, grape, region, approx price), explain why each works with the dish, and note which best suits their preferences.${priceStr}`;
+      return base + cellarPart;
+    }
     if (m === "restaurant") return base + "\n\nFor restaurant pairing: read the wine list carefully, recommend 2–3 wines from it for the specified dish, quote wine names exactly as they appear on the list, explain each pairing, and name your top pick clearly.";
     return base;
   };
@@ -1506,13 +1527,27 @@ function Sommelier({ tastings }) {
   };
 
   const handleMealPairing = async () => {
-    if (!dish.trim() || loading) return;
-    const text = `I'm planning to cook: ${dish.trim()}. What wines would you recommend?`;
-    push("user", `🍽 ${dish.trim()}`, { mode: "meal" });
+    if ((!dish.trim() && !recipeImg) || loading) return;
+    const label = [dish.trim() && `🍽 ${dish.trim()}`, recipeImg && "📷 Recipe photo"].filter(Boolean).join("  ·  ");
+    push("user", label, { mode: "meal", hasRecipeImg: !!recipeImg, recipeImg });
+    const savedDish = dish.trim();
+    const savedImg = recipeImg;
     setDish("");
+    setRecipeImg(null);
     setLoading(true);
     try {
-      const reply = await claudeChat([{ role: "user", content: text }], system("meal"));
+      const content = [];
+      if (savedImg) {
+        const { mediaType, data: imgData } = parseImageDataUrl(savedImg);
+        content.push({ type: "image", source: { type: "base64", media_type: mediaType, data: imgData } });
+      }
+      const parts = [];
+      if (savedDish) parts.push(`I'm planning to cook: ${savedDish}.`);
+      if (savedImg && !savedDish) parts.push("I've shared a recipe photo — please read the recipe from the image.");
+      parts.push("What wines would you recommend?");
+      content.push({ type: "text", text: parts.join(" ") });
+      const msgContent = content.length === 1 ? content[0].text : content;
+      const reply = await claudeChat([{ role: "user", content: msgContent }], system("meal"));
       push("assistant", reply, { mode: "meal" });
     } catch (e) {
       push("assistant", "Sorry, I couldn't reach the sommelier. Please try again.", { mode: "meal", isError: true });
@@ -1676,6 +1711,7 @@ function Sommelier({ tastings }) {
                 ? renderText(msg.text)
                 : <div style={{ fontSize: "13px", color: "#e0d8c8", fontFamily: "monospace", lineHeight: 1.5 }}>
                     {msg.hasImage && <span style={{ fontSize: "11px", color: "#666", display: "block", marginBottom: "4px" }}>📷 Wine list attached</span>}
+                    {msg.hasRecipeImg && <img src={msg.recipeImg} alt="Recipe" style={{ display: "block", maxHeight: "120px", maxWidth: "100%", borderRadius: "8px", objectFit: "contain", marginBottom: "6px" }} />}
                     {msg.hasBottleImg && <img src={msg.bottleImg} alt="Bottle" style={{ display: "block", maxHeight: "140px", maxWidth: "100%", borderRadius: "8px", objectFit: "contain", marginBottom: "6px" }} />}
                     {msg.text}
                   </div>
@@ -1725,15 +1761,76 @@ function Sommelier({ tastings }) {
 
       {/* ── Meal Pairing mode ── */}
       {mode === "meal" && (
-        <div style={{ background: "#161616", border: "1px solid #222", borderRadius: "16px", padding: "18px" }}>
+        <div style={{ background: "#161616", border: "1px solid #222", borderRadius: "16px", padding: "18px", display: "flex", flexDirection: "column", gap: "14px" }}>
           <Textarea
             label="What are you cooking?"
             value={dish} onChange={e => setDish(e.target.value)}
             placeholder="e.g. Slow-braised lamb shoulder with rosemary and garlic, roasted root vegetables"
             style={{ minHeight: "64px" }}
           />
-          <div style={{ display: "flex", justifyContent: "flex-end", marginTop: "12px" }}>
-            <Btn variant="gold" onClick={handleMealPairing} disabled={loading || !dish.trim()}>Get Recommendations</Btn>
+
+          {/* Recipe photo */}
+          <div>
+            <div style={{ fontSize: "10px", color: "#666", fontFamily: "monospace", letterSpacing: "1px", marginBottom: "8px", textTransform: "uppercase" }}>Recipe Photo (optional)</div>
+            <div style={{ display: "flex", gap: "10px", alignItems: "center", flexWrap: "wrap" }}>
+              <Btn onClick={() => recipeFileRef.current.click()} style={{ background: "#242424", border: "1px dashed #444", color: "#aaa" }}>📷 Take / Upload Recipe</Btn>
+              {recipeImg && <>
+                <span style={{ fontSize: "11px", color: "#4caf79", fontFamily: "monospace" }}>✓ Photo ready</span>
+                <button onClick={() => setRecipeImg(null)} style={{ background: "none", border: "none", color: "#555", cursor: "pointer", fontSize: "11px", fontFamily: "monospace" }}>Remove</button>
+              </>}
+            </div>
+            <input ref={recipeFileRef} type="file" accept="image/*"
+              onChange={e => { const f = e.target.files[0]; if (!f) return; if (isHeic(f)) { alert(HEIC_MSG); e.target.value = ""; return; } const r = new FileReader(); r.onload = async () => { try { setRecipeImg(await compressImage(r.result)); } catch (err) { alert(err.message); } }; r.readAsDataURL(f); e.target.value = ""; }}
+              style={{ display: "none" }} />
+            {recipeImg && <img src={recipeImg} alt="Recipe" style={{ marginTop: "10px", maxHeight: "140px", borderRadius: "8px", objectFit: "contain", border: "1px solid #2a2a2a" }} />}
+          </div>
+
+          {/* Price range toggle */}
+          <div style={{ borderTop: "1px solid #222", paddingTop: "12px" }}>
+            <label style={{ display: "flex", alignItems: "center", gap: "10px", cursor: "pointer" }}>
+              <div
+                onClick={() => setPriceRangeEnabled(v => !v)}
+                style={{
+                  width: "34px", height: "18px", borderRadius: "9px",
+                  background: priceRangeEnabled ? gold : "#2a2a2a",
+                  border: `1px solid ${priceRangeEnabled ? gold : "#3a3a3a"}`,
+                  position: "relative", transition: "background 0.2s", flexShrink: 0, cursor: "pointer",
+                }}
+              >
+                <div style={{
+                  width: "12px", height: "12px", borderRadius: "50%", background: "#fff",
+                  position: "absolute", top: "2px",
+                  left: priceRangeEnabled ? "18px" : "2px",
+                  transition: "left 0.2s",
+                }} />
+              </div>
+              <span style={{ fontSize: "11px", color: "#888", fontFamily: "monospace" }}>Filter web recommendations by price</span>
+            </label>
+            {priceRangeEnabled && (
+              <div style={{ display: "flex", gap: "10px", alignItems: "center", marginTop: "10px" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                  <span style={{ fontSize: "11px", color: "#666", fontFamily: "monospace" }}>$</span>
+                  <input
+                    type="number" min="0" value={priceMin} onChange={e => setPriceMin(e.target.value)}
+                    placeholder="Min"
+                    style={{ width: "80px", background: "#242424", border: "1px solid #333", borderRadius: "8px", padding: "7px 10px", color: "#f0ebe0", fontSize: "12px", fontFamily: "monospace", outline: "none" }}
+                  />
+                </div>
+                <span style={{ fontSize: "11px", color: "#444", fontFamily: "monospace" }}>to</span>
+                <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                  <span style={{ fontSize: "11px", color: "#666", fontFamily: "monospace" }}>$</span>
+                  <input
+                    type="number" min="0" value={priceMax} onChange={e => setPriceMax(e.target.value)}
+                    placeholder="Max"
+                    style={{ width: "80px", background: "#242424", border: "1px solid #333", borderRadius: "8px", padding: "7px 10px", color: "#f0ebe0", fontSize: "12px", fontFamily: "monospace", outline: "none" }}
+                  />
+                </div>
+              </div>
+            )}
+          </div>
+
+          <div style={{ display: "flex", justifyContent: "flex-end" }}>
+            <Btn variant="gold" onClick={handleMealPairing} disabled={loading || (!dish.trim() && !recipeImg)}>Get Recommendations</Btn>
           </div>
         </div>
       )}
@@ -2436,7 +2533,7 @@ export default function App() {
       {tab === "stats" && <Stats tastings={tastings} cellar={cellar} bulkH={bulkH} onPopulateHalliday={populateAllHalliday} onResetBulk={() => setBulkH(null)} />}
 
       {/* Sommelier tab */}
-      {tab === "sommelier" && <Sommelier tastings={tastings} />}
+      {tab === "sommelier" && <Sommelier tastings={tastings} cellar={cellar} />}
 
       {/* Floating scan button */}
       {!showSplash && (
