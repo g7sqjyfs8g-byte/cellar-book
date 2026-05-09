@@ -66,6 +66,23 @@ function compressForSheet(dataUrl) {
   });
 }
 
+async function searchWineImage(name, producer) {
+  const query = [producer, name].filter(Boolean).join(" ");
+  const res = await fetch(
+    `https://world.openfoodfacts.org/cgi/search.pl?search_terms=${encodeURIComponent(query)}&action=process&json=true&page_size=5&search_simple=1`
+  );
+  const data = await res.json();
+  for (const product of (data.products || [])) {
+    const imageUrl = product.image_front_url || product.image_url;
+    if (!imageUrl) continue;
+    const proxyRes = await fetch(`/api/fetch-image?url=${encodeURIComponent(imageUrl)}`);
+    if (!proxyRes.ok) continue;
+    const { dataUrl } = await proxyRes.json();
+    if (dataUrl) return dataUrl;
+  }
+  return null;
+}
+
 async function lookupBarcode(barcode) {
   const res = await fetch(`https://world.openfoodfacts.org/product/${barcode}.json`);
   const data = await res.json();
@@ -598,18 +615,36 @@ function BarcodeScanner({ onDetected, onClose }) {
 
 // ─── Tasting Detail Modal ─────────────────────────────────────────
 
-function TastingDetail({ wine, onEdit, onDelete, onClose }) {
+function TastingDetail({ wine, onEdit, onDelete, onClose, onFindLabel }) {
   const both = wine.jmRating != null && wine.nickyRating != null;
   const avg = both ? ((wine.jmRating + wine.nickyRating) / 2).toFixed(1) : null;
   const [sc, tc] = styleColors[wine.style] || ["#222", "#888"];
+  const [finding, setFinding] = useState(false);
+  const [findMsg, setFindMsg] = useState("");
+
+  const handleFindLabel = async () => {
+    setFinding(true);
+    setFindMsg("");
+    const found = await onFindLabel(wine);
+    setFinding(false);
+    setFindMsg(found ? "✓ Label image saved." : "No image found — try uploading one manually.");
+  };
 
   return (
     <Modal title="" onClose={onClose}>
       <div style={{ display: "flex", flexDirection: "column", gap: "18px" }}>
         {/* Header */}
         <div style={{ display: "flex", gap: "16px", alignItems: "flex-start" }}>
-          {wine.label && (
+          {wine.label ? (
             <img src={wine.label} alt="label" style={{ width: "64px", height: "88px", objectFit: "cover", borderRadius: "8px", border: "1px solid #333", flexShrink: 0 }} />
+          ) : onFindLabel && (
+            <div style={{ display: "flex", flexDirection: "column", gap: "6px", alignItems: "center", flexShrink: 0 }}>
+              <div style={{ width: "64px", height: "88px", background: "#131313", border: "1px dashed #333", borderRadius: "8px", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "22px" }}>🍷</div>
+              <Btn onClick={handleFindLabel} disabled={finding} style={{ fontSize: "10px", padding: "4px 8px", whiteSpace: "nowrap" }}>
+                {finding ? "Searching…" : "Find image"}
+              </Btn>
+              {findMsg && <div style={{ fontSize: "10px", fontFamily: "monospace", color: findMsg.startsWith("✓") ? "#4caf79" : "#666", textAlign: "center", maxWidth: "64px" }}>{findMsg}</div>}
+            </div>
           )}
           <div style={{ flex: 1 }}>
             <div style={{ display: "flex", gap: "8px", alignItems: "center", marginBottom: "6px", flexWrap: "wrap" }}>
@@ -2277,6 +2312,16 @@ export default function App() {
           onClose={() => setViewTasting(null)}
           onEdit={w => { setViewTasting(null); setEditTasting(w); setShowTastingForm(true); }}
           onDelete={id => { setViewTasting(null); deleteTasting(id); }}
+          onFindLabel={async (w) => {
+            const dataUrl = await searchWineImage(w.name, w.producer);
+            if (!dataUrl) return false;
+            const thumbnail = await compressForSheet(dataUrl);
+            const updated = { ...w, label: dataUrl };
+            setTastings(ts => ts.map(t => t.id === w.id ? updated : t));
+            setViewTasting(updated);
+            syncWrap(() => sheetsUpsert("tastings", { ...updated, label: thumbnail }));
+            return true;
+          }}
         />
       )}
       {showTastingForm && (

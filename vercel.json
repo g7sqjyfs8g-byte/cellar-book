@@ -5,6 +5,9 @@
     },
     "api/sheets.js": {
       "maxDuration": 15
+    },
+    "api/fetch-image.js": {
+      "maxDuration": 15
     }
   }
 }
