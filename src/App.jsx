@@ -2294,6 +2294,9 @@ export default function App() {
   const [tSort, setTSort] = useState("date");
   const [tSearch, setTSearch] = useState("");
   const [cSearch, setCSearch] = useState("");
+  const [cSort, setCSort] = useState("name");
+  const [cRegion, setCRegion] = useState("All");
+  const [cGrape, setCGrape] = useState("All");
 
   // Load from Google Sheets on mount
   useEffect(() => {
@@ -2389,9 +2392,25 @@ export default function App() {
       return 0;
     });
 
+  const parseCellarPrice = (p) => { const n = parseFloat(String(p || "").replace(/[^0-9.]/g, "")); return isNaN(n) ? 0 : n; };
+  const uniqueCellarRegions = [...new Set(cellar.map(w => w.region).filter(Boolean))].sort();
+  const uniqueCellarGrapes  = [...new Set(cellar.map(w => w.grape).filter(Boolean))].sort();
+
   const filteredCellar = cellar
-    .filter(w => !cSearch || `${w.name} ${w.producer} ${w.region}`.toLowerCase().includes(cSearch.toLowerCase()))
-    .sort((a, b) => a.name.localeCompare(b.name));
+    .filter(w => !cSearch || `${w.name} ${w.producer} ${w.region} ${w.grape}`.toLowerCase().includes(cSearch.toLowerCase()))
+    .filter(w => cRegion === "All" || w.region === cRegion)
+    .filter(w => cGrape === "All" || w.grape === cGrape)
+    .sort((a, b) => {
+      switch (cSort) {
+        case "vintage":  return (b.vintage || 0) - (a.vintage || 0);
+        case "drinkBy":  return (a.drinkBy || 9999) - (b.drinkBy || 9999);
+        case "halliday": return (b.hallidayRating || 0) - (a.hallidayRating || 0);
+        case "price":    return parseCellarPrice(b.price) - parseCellarPrice(a.price);
+        case "region":   return (a.region || "").localeCompare(b.region || "");
+        case "grape":    return (a.grape || "").localeCompare(b.grape || "");
+        default:         return a.name.localeCompare(b.name);
+      }
+    });
 
   const totalBottles = cellar.reduce((s, w) => s + (w.quantity || 0), 0);
   const avgJM = tastings.filter(w => w.jmRating).length
@@ -2508,13 +2527,53 @@ export default function App() {
       {/* Cellar tab */}
       {tab === "cellar" && (
         <div style={{ maxWidth: "900px", margin: "0 auto", padding: "20px" }}>
-          <div style={{ display: "flex", gap: "10px", marginBottom: "20px", alignItems: "center", flexWrap: "wrap" }}>
+          {/* Search + action row */}
+          <div style={{ display: "flex", gap: "10px", marginBottom: "10px", alignItems: "center", flexWrap: "wrap" }}>
             <input value={cSearch} onChange={e => setCSearch(e.target.value)} placeholder="Search cellar…"
               style={{ background: "#1a1a1a", border: "1px solid #2e2e2e", borderRadius: "10px", padding: "9px 14px", color: "#f0ebe0", fontSize: "13px", fontFamily: "monospace", outline: "none", flex: 1, minWidth: "160px" }} />
             <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
               <div style={{ fontFamily: "'Playfair Display', serif", fontSize: "18px", color: gold }}>{totalBottles} bottles</div>
               <Btn variant="gold" onClick={() => { setEditCellar(null); setShowCellarForm(true); }}>+ Add Bottle</Btn>
             </div>
+          </div>
+
+          {/* Filter + sort row */}
+          <div style={{ display: "flex", gap: "8px", marginBottom: "18px", flexWrap: "wrap", alignItems: "center" }}>
+            {/* Sort */}
+            <select value={cSort} onChange={e => setCSort(e.target.value)} style={{ background: "#1a1a1a", border: "1px solid #2e2e2e", borderRadius: "10px", padding: "7px 10px", color: "#aaa", fontSize: "11px", fontFamily: "monospace", outline: "none", cursor: "pointer" }}>
+              <option value="name">Sort: Name</option>
+              <option value="vintage">Sort: Vintage</option>
+              <option value="drinkBy">Sort: Drink By</option>
+              <option value="halliday">Sort: Halliday Score</option>
+              <option value="price">Sort: Price</option>
+              <option value="region">Sort: Region</option>
+              <option value="grape">Sort: Grape</option>
+            </select>
+
+            {/* Region filter */}
+            {uniqueCellarRegions.length > 0 && (
+              <select value={cRegion} onChange={e => setCRegion(e.target.value)} style={{ background: cRegion !== "All" ? "rgba(201,168,76,0.12)" : "#1a1a1a", border: `1px solid ${cRegion !== "All" ? gold : "#2e2e2e"}`, borderRadius: "10px", padding: "7px 10px", color: cRegion !== "All" ? gold : "#aaa", fontSize: "11px", fontFamily: "monospace", outline: "none", cursor: "pointer" }}>
+                <option value="All">All Regions</option>
+                {uniqueCellarRegions.map(r => <option key={r} value={r}>{r}</option>)}
+              </select>
+            )}
+
+            {/* Grape filter */}
+            {uniqueCellarGrapes.length > 0 && (
+              <select value={cGrape} onChange={e => setCGrape(e.target.value)} style={{ background: cGrape !== "All" ? "rgba(201,168,76,0.12)" : "#1a1a1a", border: `1px solid ${cGrape !== "All" ? gold : "#2e2e2e"}`, borderRadius: "10px", padding: "7px 10px", color: cGrape !== "All" ? gold : "#aaa", fontSize: "11px", fontFamily: "monospace", outline: "none", cursor: "pointer" }}>
+                <option value="All">All Grapes</option>
+                {uniqueCellarGrapes.map(g => <option key={g} value={g}>{g}</option>)}
+              </select>
+            )}
+
+            {/* Clear filters */}
+            {(cRegion !== "All" || cGrape !== "All" || cSearch) && (
+              <button onClick={() => { setCRegion("All"); setCGrape("All"); setCSearch(""); }} style={{ background: "none", border: "1px solid #2e2e2e", borderRadius: "10px", padding: "7px 12px", color: "#555", cursor: "pointer", fontSize: "11px", fontFamily: "monospace" }}>Clear</button>
+            )}
+
+            {filteredCellar.length !== cellar.length && (
+              <span style={{ fontSize: "11px", color: "#555", fontFamily: "monospace", marginLeft: "4px" }}>{filteredCellar.length} of {cellar.length}</span>
+            )}
           </div>
           <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
             {filteredCellar.length === 0 && (
